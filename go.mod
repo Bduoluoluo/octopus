@@ -14,7 +14,6 @@ require (
 	github.com/samber/lo v1.52.0
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
-	github.com/studio-b12/gowebdav v0.12.0
 	github.com/tiktoken-go/tokenizer v0.7.0
 	github.com/tmaxmax/go-sse v0.11.0
 	go.uber.org/zap v1.27.1

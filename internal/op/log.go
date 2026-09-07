@@ -4,6 +4,8 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
+	"errors"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -227,15 +229,50 @@ func relayLogFlushPendingBatch(ctx context.Context, batchSize int) error {
 	if batchSize > len(relayLogPending) {
 		batchSize = len(relayLogPending)
 	}
+	limitBytes := int64(0)
+	if db.GetDB().Dialector.Name() == "sqlite" {
+		var err error
+		limitBytes, err = relayLogStorageLimit()
+		if err != nil {
+			relayLogPendingLock.Unlock()
+			return err
+		}
+	}
 	batch := make([]model.RelayLog, batchSize)
 	copy(batch, relayLogPending[:batchSize])
-	batchBytes := relayLogBatchApproxBytes(batch)
 	relayLogPendingLock.Unlock()
+	reserveBytes := int64(0)
+	if limitBytes > 0 {
+		for {
+			var err error
+			reserveBytes, err = relayLogBatchStorageReserve(batch)
+			if err != nil {
+				return err
+			}
+			if batchSize == 1 || reserveBytes <= limitBytes/4 {
+				break
+			}
+			batchSize /= 2
+			batch = batch[:batchSize]
+		}
+	}
+	batchBytes := relayLogBatchApproxBytes(batch)
 
 	start := time.Now()
-	result := db.GetDB().WithContext(ctx).CreateInBatches(&batch, relayLogBatchSize)
-	if result.Error != nil {
-		return result.Error
+	skipBatch := limitBytes > 0 && reserveBytes > limitBytes/4
+	if skipBatch {
+		relayLogDroppedTotal.Add(uint64(len(batch)))
+		log.Warnw("relay_log.oversized_dropped", "count", len(batch), "limit_bytes", limitBytes)
+	} else {
+		storageCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		defer cancel()
+		if err := relayLogEnforceStorageLimit(storageCtx, reserveBytes); err != nil {
+			return err
+		}
+		result := db.GetDB().WithContext(ctx).CreateInBatches(&batch, relayLogBatchSize)
+		if result.Error != nil {
+			return result.Error
+		}
 	}
 	duration := time.Since(start)
 	log.Debugw("relay_log.flush", "batch_size", len(batch), "duration", duration.String(), "queue_length", RelayLogPendingLen())
@@ -269,7 +306,9 @@ func relayLogFlushPendingBatch(ctx context.Context, batchSize int) error {
 	}
 	relayLogPendingLock.Unlock()
 
-	return nil
+	storageCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	return relayLogEnforceStorageLimit(storageCtx, 0)
 }
 
 func relayLogBatchApproxBytes(batch []model.RelayLog) int64 {
@@ -278,6 +317,14 @@ func relayLogBatchApproxBytes(batch []model.RelayLog) int64 {
 		total += relayLogApproxBytes(item)
 	}
 	return total
+}
+
+func relayLogBatchStorageReserve(batch []model.RelayLog) (int64, error) {
+	encoded, err := json.Marshal(batch)
+	if err != nil {
+		return 0, err
+	}
+	return int64(len(encoded))*2 + int64(len(batch))*4096 + 65536, nil
 }
 
 func RelayLogFlushPending(ctx context.Context) error {
@@ -324,15 +371,29 @@ func RelayLogSaveDBTask(ctx context.Context) error {
 		return err
 	}
 
-	if enabled {
-		if err := RelayLogFlushPending(ctx); err != nil {
-			return err
-		}
-		return relayLogCleanup(ctx)
+	maintenanceErr := relayLogMaintainStorage(ctx)
+	if enabled && ctx.Err() == nil {
+		return errors.Join(maintenanceErr, RelayLogFlushPending(ctx))
 	}
+	return maintenanceErr
+}
 
+func relayLogMaintainStorage(ctx context.Context) error {
+	relayLogFlushLock.Lock()
+	defer relayLogFlushLock.Unlock()
 	trimRelayLogRecent()
-	return nil
+	retentionErr := relayLogCleanup(ctx)
+	capacityErr := relayLogEnforceStorageLimit(ctx, 0)
+	var reclaimErr error
+	if db.GetDB().Dialector.Name() == "sqlite" {
+		limitBytes, err := relayLogStorageLimit()
+		if err != nil {
+			reclaimErr = err
+		} else {
+			reclaimErr = db.ReclaimSQLiteStorage(ctx, limitBytes)
+		}
+	}
+	return errors.Join(capacityErr, retentionErr, reclaimErr)
 }
 
 func trimRelayLogRecent() {

@@ -6,11 +6,9 @@
 
 **A Simple, Beautiful, and Elegant LLM API Aggregation & Load Balancing Service for Individuals**
 
- English | [简体中文](README_zh.md) | [Getting Started](USAGE.md)
+ English | [简体中文](README_zh.md)
 
 </div>
-
-> Fork of [Hureru/octopus](https://github.com/Hureru/octopus) (itself based on [bestruirui/octopus](https://github.com/bestruirui/octopus)). Maintained at [xuanli27/octopus](https://github.com/xuanli27/octopus). See [Differences from Upstream](#-differences-from-upstream).
 
 
 ## ✨ Features
@@ -25,8 +23,6 @@
 - 📊 **Analytics** - Comprehensive request statistics, token consumption, and cost tracking
 - 🎨 **Elegant UI** - Clean and beautiful web management panel
 - 🗄️ **Multi-Database Support** - Support for SQLite, MySQL, PostgreSQL
-
-> 📖 **First time using Octopus?** Check out the **[Getting Started Guide](USAGE.md)** for a complete walkthrough from deployment to client integration — get up and running in 5 minutes.
 
 
 ## 🚀 Quick Start
@@ -91,10 +87,31 @@ go run main.go start
 ```bash
 cd web && pnpm install && NEXT_PUBLIC_API_BASE_URL="http://127.0.0.1:8080" pnpm run dev
 ## Open a new terminal, start the backend service
-go run main.go start
+OCTOPUS_SERVER_HOST=127.0.0.1 OCTOPUS_DEBUG=true go run main.go start
 ## Access the frontend at
 http://localhost:3000
 ```
+
+**Windows PowerShell:**
+
+Terminal one, start the frontend from the project root:
+
+```powershell
+cd web
+pnpm.cmd install
+$env:NEXT_PUBLIC_API_BASE_URL = "http://127.0.0.1:8080"
+pnpm.cmd run dev
+```
+
+Terminal two, start the backend from the project root:
+
+```powershell
+$env:OCTOPUS_SERVER_HOST = "127.0.0.1"
+$env:OCTOPUS_DEBUG = "true"
+go run main.go start
+```
+
+`OCTOPUS_DEBUG=true` additionally allows cross-origin requests from `http://localhost:3000` and `http://127.0.0.1:3000` only in debug mode, without having to log in and configure the allowlist first. Other origins still use the CORS allowlist in settings; add the exact origin there when using another frontend port or HTTPS. Restart the backend after changing its environment variables, and do not enable debug mode in production.
 
 ### 🔐 Default Credentials
 

@@ -62,7 +62,7 @@ jobs:
           COMMIT_ID="$(git rev-parse --short HEAD)"
           LDFLAGS="-X 'github.com/xuanli27/octopus/internal/conf.Version=${GIT_VERSION}' \
                    -X 'github.com/xuanli27/octopus/internal/conf.BuildTime=${BUILD_TIME}' \
-                   -X 'github.com/xuanli27/octopus/internal/conf.Author=xuanli27' \
+                   -X 'github.com/xuanli27/octopus/internal/conf.Author=Bduoluoluo' \
                    -X 'github.com/xuanli27/octopus/internal/conf.Commit=${COMMIT_ID}' \
                    -s -w"
 

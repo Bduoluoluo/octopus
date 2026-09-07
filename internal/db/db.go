@@ -140,7 +140,9 @@ func initSQLite(path string, config *gorm.Config) (*gorm.DB, error) {
 	// glebarez/sqlite (modernc.org/sqlite) 只识别 _pragma=NAME(VALUE) 形式参数，
 	// 旧的下划线参数会被静默忽略（导致 WAL/busy_timeout 实际未生效）。
 	params := []string{
+		"_pragma=auto_vacuum(INCREMENTAL)",
 		"_pragma=journal_mode(WAL)",
+		"_pragma=journal_size_limit(16777216)",
 		"_pragma=synchronous(NORMAL)",
 		"_pragma=busy_timeout(5000)",
 		"_pragma=foreign_keys(ON)",

@@ -21,10 +21,14 @@ const (
 	TaskSiteSyncJobCleanup = "site_sync_job_cleanup"
 	TaskSiteCheckin        = "site_checkin"
 	TaskWSAffinityCleanup  = "ws_affinity_cleanup"
-	TaskWebDAVBackup       = "webdav_backup"
 )
 
 func Init() {
+	Register(TaskRelayLogSave, time.Minute, true, func() {
+		if err := op.RelayLogMaintainStorage(context.Background()); err != nil {
+			log.Warnf("relay log maintenance failed: %v", err)
+		}
+	})
 	// Recover clearly abandoned jobs immediately, then keep checking because a
 	// recent job from the previous process may not become stale until later.
 	SiteSyncJobCleanupTask()
@@ -79,12 +83,6 @@ func Init() {
 	}
 	statsSaveInterval := time.Duration(statsSaveIntervalMinutes) * time.Minute
 	Register(TaskStatsSave, statsSaveInterval, false, op.StatsSaveDBTask)
-	// 注册中继日志保存任务
-	Register(TaskRelayLogSave, time.Hour, false, func() {
-		if err := op.RelayLogSaveDBTask(context.Background()); err != nil {
-			log.Warnf("relay log save db task failed: %v", err)
-		}
-	})
 
 	Register(TaskWSAffinityCleanup, 10*time.Minute, false, func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -105,13 +103,4 @@ func Init() {
 		outlierIntervalMinutes = 2
 	}
 	Register(string(model.SettingKeyOutlierRetireInterval), time.Duration(outlierIntervalMinutes)*time.Minute, false, SiteOutlierRetireTask)
-
-	// 注册 WebDAV 自动备份任务（间隔为 0 时不运行）
-	webdavIntervalHours, err := op.SettingGetInt(model.SettingKeyWebDAVBackupInterval)
-	if err != nil {
-		log.Warnf("failed to get webdav backup interval: %v", err)
-	} else if webdavIntervalHours > 0 {
-		webdavInterval := time.Duration(webdavIntervalHours) * time.Hour
-		Register(string(model.SettingKeyWebDAVBackupInterval), webdavInterval, false, WebDAVBackupTask)
-	}
 }

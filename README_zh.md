@@ -6,11 +6,9 @@
 
 **为个人打造的简单、美观、优雅的 LLM API 聚合与负载均衡服务**
 
-简体中文 | [English](README.md) | [使用指南](USAGE_zh.md)
+简体中文 | [English](README.md)
 
 </div>
-
-> 本仓库维护于 [xuanli27/octopus](https://github.com/xuanli27/octopus)，Fork 自 [Hureru/octopus](https://github.com/Hureru/octopus)（其基于 [bestruirui/octopus](https://github.com/bestruirui/octopus)）。与上游的差异见 [与上游的差异](#-与上游的差异)。
 
 
 ## ✨ 特性
@@ -25,8 +23,6 @@
 - 📊 **数据统计** - 全面的请求统计、Token 消耗、费用追踪
 - 🎨 **优雅界面** - 简洁美观的 Web 管理面板
 - 🗄️ **多数据库支持** - 支持 SQLite、MySQL、PostgreSQL
-
-> 📖 **第一次使用？** 请先阅读 **[新手使用指南](USAGE_zh.md)**，覆盖从部署到接入客户端的完整流程，5 分钟快速上手。
 
 
 ## 🚀 快速开始
@@ -91,10 +87,31 @@ go run main.go start
 ```bash
 cd web && pnpm install && NEXT_PUBLIC_API_BASE_URL="http://127.0.0.1:8080" pnpm run dev
 ## 新建终端,启动后端服务
-go run main.go start
+OCTOPUS_SERVER_HOST=127.0.0.1 OCTOPUS_DEBUG=true go run main.go start
 ## 访问前端地址
 http://localhost:3000
 ```
+
+**Windows PowerShell：**
+
+终端一，在项目根目录启动前端：
+
+```powershell
+cd web
+pnpm.cmd install
+$env:NEXT_PUBLIC_API_BASE_URL = "http://127.0.0.1:8080"
+pnpm.cmd run dev
+```
+
+终端二，在项目根目录启动后端：
+
+```powershell
+$env:OCTOPUS_SERVER_HOST = "127.0.0.1"
+$env:OCTOPUS_DEBUG = "true"
+go run main.go start
+```
+
+`OCTOPUS_DEBUG=true` 仅在调试模式下额外允许 `http://localhost:3000` 和 `http://127.0.0.1:3000` 跨域访问，无需先登录修改白名单。其他来源仍使用设置中的跨域白名单；前端使用其他端口或 HTTPS 时需手动添加对应来源。更改后端环境变量后需重启后端，生产环境请勿启用调试模式。
 
 ### 🔐 默认账户
 

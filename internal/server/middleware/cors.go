@@ -3,23 +3,28 @@ package middleware
 import (
 	"strings"
 
-	"github.com/xuanli27/octopus/internal/model"
-	"github.com/xuanli27/octopus/internal/op"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"github.com/xuanli27/octopus/internal/conf"
+	"github.com/xuanli27/octopus/internal/model"
+	"github.com/xuanli27/octopus/internal/op"
 )
 
 func Cors() gin.HandlerFunc {
 	config := cors.DefaultConfig()
 	config.AllowCredentials = true
 	config.AllowMethods = []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"}
-	config.AllowHeaders = []string{"*"}
+	config.AllowHeaders = []string{"*", "Authorization", "Content-Type"}
 	config.ExposeHeaders = []string{"Content-Disposition"}
 	// CORS 白名单:
 	// - 为空: 不允许跨域
 	// - "*": 允许所有来源
 	// - 逗号分隔的域名列表: 只允许指定的域名 (如 "https://example.com,https://example2.com")
 	config.AllowOriginFunc = func(origin string) bool {
+		if conf.IsDebug() && (origin == "http://localhost:3000" || origin == "http://127.0.0.1:3000") {
+			return true
+		}
+
 		allowed, err := op.SettingGetString(model.SettingKeyCORSAllowOrigins)
 		if err != nil {
 			return false

@@ -5,6 +5,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/spf13/cobra"
 	"github.com/xuanli27/octopus/internal/conf"
 	"github.com/xuanli27/octopus/internal/db"
 	"github.com/xuanli27/octopus/internal/op"
@@ -14,7 +15,6 @@ import (
 	"github.com/xuanli27/octopus/internal/utils/log"
 	"github.com/xuanli27/octopus/internal/utils/safe"
 	"github.com/xuanli27/octopus/internal/utils/shutdown"
-	"github.com/spf13/cobra"
 )
 
 var cfgFile string
@@ -50,6 +50,9 @@ var startCmd = &cobra.Command{
 			log.Errorf("cache init error: %v", err)
 			shutdown.Shutdown()
 			os.Exit(1)
+		}
+		if err := op.RelayLogMaintainStorage(cmd.Context()); err != nil {
+			log.Warnf("initial relay log maintenance failed: %v", err)
 		}
 		relayLogWriterCtx, stopRelayLogWriter := context.WithCancel(context.Background())
 		shutdown.Register(func() error {

@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/xuanli27/octopus/internal/model"
 	"github.com/xuanli27/octopus/internal/op"
 	"github.com/xuanli27/octopus/internal/server/middleware"
@@ -18,7 +19,6 @@ import (
 	"github.com/xuanli27/octopus/internal/task"
 	"github.com/xuanli27/octopus/internal/utils/log"
 	"github.com/xuanli27/octopus/internal/utils/safe"
-	"github.com/gin-gonic/gin"
 )
 
 var projectedAutoGroupQueued atomic.Bool
@@ -69,6 +69,12 @@ func setSetting(c *gin.Context) {
 		return
 	}
 	switch setting.Key {
+	case model.SettingKeyRelayLogMaxDBSizeMB, model.SettingKeyRelayLogKeepPeriod, model.SettingKeyRelayLogKeepEnabled:
+		safe.Go("relay-log-maintenance-settings", func() {
+			if err := op.RelayLogMaintainStorage(context.Background()); err != nil {
+				log.Warnf("relay log maintenance after settings change failed: %v", err)
+			}
+		})
 	case model.SettingKeyModelInfoUpdateInterval:
 		hours, err := strconv.Atoi(setting.Value)
 		if err != nil {
@@ -90,19 +96,6 @@ func setSetting(c *gin.Context) {
 			return
 		}
 		task.Update(string(setting.Key), time.Duration(hours)*time.Hour)
-	case model.SettingKeyWebDAVBackupInterval:
-		hours, err := strconv.Atoi(setting.Value)
-		if err != nil {
-			resp.Error(c, http.StatusBadRequest, err.Error())
-			return
-		}
-		if hours > 0 {
-			interval := time.Duration(hours) * time.Hour
-			task.Register(string(setting.Key), interval, false, task.WebDAVBackupTask)
-			task.Update(string(setting.Key), interval)
-		} else {
-			task.Update(string(setting.Key), 0)
-		}
 	case model.SettingKeyProjectedChannelAutoGroupEnabled:
 		mode, _ := model.ParseAutoGroupSettingValue(setting.Value)
 		if mode != model.AutoGroupTypeNone && projectedAutoGroupQueued.CompareAndSwap(false, true) {
