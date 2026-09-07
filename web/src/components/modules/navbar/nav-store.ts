@@ -5,7 +5,7 @@ import { persist } from 'zustand/middleware'
 export type NavItem = 'home' | 'site' | 'channel' | 'group' | 'model' | 'log' | 'setting'
 
 /** Primary IA (方案 A): 概览 / 接入 / 路由 / 流量 / 设置 */
-export const PRIMARY_NAV: NavItem[] = ['home', 'site', 'group', 'log', 'setting']
+export const PRIMARY_NAV: NavItem[] = ['home', 'group', 'log', 'setting']
 
 /** Advanced pages collapsed under "更多" */
 export const ADVANCED_NAV: NavItem[] = ['channel', 'model']

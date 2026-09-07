@@ -2,8 +2,6 @@
 
 import { PageWrapper } from '@/components/common/PageWrapper';
 import { SettingAppearance } from './Appearance';
-import { SettingQuickLinks } from './QuickLinks';
-import { SettingAccessBundle } from './AccessBundle';
 import { SettingAPIKey } from './APIKey';
 import { SettingAccount } from './Account';
 import { SettingInfo } from './Info';
@@ -11,15 +9,12 @@ import { SettingNetwork } from './Network';
 import { SettingReliability } from './Reliability';
 import { SettingSyncTasks } from './SyncTasks';
 import { SettingData } from './Data';
-import { SettingWebDAVBackup } from './WebDAVBackup';
 
 export function Setting() {
     return (
         <div className="h-full min-h-0 overflow-y-auto overscroll-contain rounded-t-3xl">
             <PageWrapper className="columns-1 gap-4 pb-24 md:columns-2 md:pb-4 *:mb-4 *:min-w-0 *:break-inside-avoid">
                 <SettingAPIKey key="setting-apikey" />
-                <SettingAccessBundle key="setting-access-bundle" />
-                <SettingQuickLinks key="setting-quick-links" />
                 <SettingInfo key="setting-info" />
                 <SettingAppearance key="setting-appearance" />
                 <SettingNetwork key="setting-network" />
@@ -27,7 +22,6 @@ export function Setting() {
                 <SettingReliability key="setting-reliability" />
                 <SettingSyncTasks key="setting-sync-tasks" />
                 <SettingData key="setting-data" />
-                <SettingWebDAVBackup key="setting-webdav-backup" />
             </PageWrapper>
         </div>
     );

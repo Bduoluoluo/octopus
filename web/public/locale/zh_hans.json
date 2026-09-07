@@ -435,6 +435,11 @@
         "label": "日志保存天数",
         "placeholder": "请输入天数"
       },
+      "maxDBSize": {
+        "label": "数据库上限（MiB）",
+        "hint": "超过上限时自动删除最旧的一半日志，默认 1024 MiB（1 GiB）。",
+        "description": "容量清理仅删除历史日志，不会删除渠道、密钥或统计数据。"
+      },
       "clear": {
         "label": "清空历史日志",
         "button": "清空",
@@ -486,57 +491,6 @@
     "data": {
       "title": "数据管理"
     },
-    "webdavBackup": {
-      "title": "WebDAV 备份",
-      "url": {
-        "label": "WebDAV 地址",
-        "placeholder": "https://dav.example.com/dav"
-      },
-      "username": {
-        "label": "用户名",
-        "placeholder": "用户名"
-      },
-      "password": {
-        "label": "密码",
-        "placeholder": "密码"
-      },
-      "backupPath": {
-        "label": "远程目录",
-        "placeholder": "/octopus-backups"
-      },
-      "interval": {
-        "label": "自动备份间隔(小时)",
-        "placeholder": "0 = 禁用",
-        "description": "设为 0 表示禁用自动备份"
-      },
-      "retentionCount": {
-        "label": "保留份数",
-        "placeholder": "10"
-      },
-      "includeStats": "包含统计数据",
-      "testConnection": "测试连接",
-      "testSuccess": "连接成功",
-      "testFailed": "连接失败",
-      "testing": "测试中...",
-      "triggerBackup": "立即备份",
-      "triggerSuccess": "备份成功",
-      "triggerFailed": "备份失败",
-      "triggering": "备份中...",
-      "backupList": "远程备份列表",
-      "loading": "加载中...",
-      "loadError": "加载备份列表失败",
-      "noBackups": "暂无备份文件",
-      "restore": "恢复",
-      "restoring": "恢复中...",
-      "restoreSuccess": "恢复成功",
-      "restoreFailed": "恢复失败",
-      "restoreConfirm": "确认从此备份恢复？已有数据将被增量覆盖。",
-      "fileName": "文件名",
-      "fileSize": "大小",
-      "modifiedAt": "修改时间",
-      "refresh": "刷新",
-      "notConfigured": "WebDAV 未配置"
-    },
     "colorTheme": {
       "label": "色彩主题",
       "hint": "经典 shadcn 风格色板，可与浅色/深色模式叠加使用。",
@@ -552,37 +506,6 @@
         "orange": "Orange",
         "rose": "Rose",
         "violet": "Violet"
-      }
-    },
-    "quickLinks": {
-      "title": "快捷入口",
-      "hint": "渠道与价格在主导航「更多」中，也可从这里进入。",
-      "siteChannel": "站点渠道",
-      "siteChannelDesc": "投影渠道 · 源密钥 · 模型路由",
-      "manualChannel": "普通渠道",
-      "manualChannelDesc": "手动 Base URL + 密钥",
-      "pricing": "模型价格",
-      "pricingDesc": "价格表与倍率",
-      "connect": "接入站点",
-      "connectDesc": "账号同步与签到"
-    },
-    "accessBundle": {
-      "title": "接入信息",
-      "hint": "复制 Base URL、访问密钥与可用 model，给客户端直接用。",
-      "baseUrl": "服务地址",
-      "useCurrent": "当前页面",
-      "apiKey": "访问密钥",
-      "pickKey": "选择密钥",
-      "noKey": "还没有启用中的访问密钥，请先在上方创建。",
-      "noModels": "还没有对外分组（model）。",
-      "curl": "示例 curl",
-      "copy": "复制",
-      "copied": "已复制",
-      "copyFailed": "复制失败",
-      "fields": {
-        "base": "Base URL",
-        "key": "访问密钥",
-        "models": "可用 model（对外分组）"
       }
     }
   },

@@ -3,7 +3,6 @@ import { lazy, ComponentType } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import {
     Activity,
-    Cable,
     Home,
     Radio,
     Settings,
@@ -28,16 +27,14 @@ export interface RouteConfig {
 }
 
 const Home_Module = lazyWithPreload(() => import('@/components/modules/home').then(m => ({ default: m.Home })));
-const Site_Module = lazyWithPreload(() => import('@/components/modules/site').then(m => ({ default: m.Site })));
 const Channel_Module = lazyWithPreload(() => import('@/components/modules/channel').then(m => ({ default: m.Channel })));
 const Model_Module = lazyWithPreload(() => import('@/components/modules/model').then(m => ({ default: m.Model })));
 const Group_Module = lazyWithPreload(() => import('@/components/modules/group').then(m => ({ default: m.Group })));
 const Log_Module = lazyWithPreload(() => import('@/components/modules/log').then(m => ({ default: m.Log })));
 const Setting_Module = lazyWithPreload(() => import('@/components/modules/setting').then(m => ({ default: m.Setting })));
 
-const ROUTE_BY_ID: Record<NavItem, Omit<RouteConfig, 'tier'>> = {
+const ROUTE_BY_ID: Record<Exclude<NavItem, 'site'>, Omit<RouteConfig, 'tier'>> = {
     home: { id: 'home', labelKey: 'home', icon: Home, component: Home_Module },
-    site: { id: 'site', labelKey: 'connect', icon: Cable, component: Site_Module },
     group: { id: 'group', labelKey: 'route', icon: Waypoints, component: Group_Module },
     log: { id: 'log', labelKey: 'traffic', icon: Activity, component: Log_Module },
     setting: { id: 'setting', labelKey: 'setting', icon: Settings, component: Setting_Module },
@@ -47,8 +44,8 @@ const ROUTE_BY_ID: Record<NavItem, Omit<RouteConfig, 'tier'>> = {
 
 /** Full route table (primary first). */
 export const ROUTES: RouteConfig[] = [
-    ...PRIMARY_NAV.map((id) => ({ ...ROUTE_BY_ID[id], tier: 'primary' as const })),
-    ...ADVANCED_NAV.map((id) => ({ ...ROUTE_BY_ID[id], tier: 'advanced' as const })),
+    ...PRIMARY_NAV.map((id) => ({ ...ROUTE_BY_ID[id as Exclude<NavItem, 'site'>], tier: 'primary' as const })),
+    ...ADVANCED_NAV.map((id) => ({ ...ROUTE_BY_ID[id as Exclude<NavItem, 'site'>], tier: 'advanced' as const })),
 ];
 
 export const PRIMARY_ROUTES = ROUTES.filter((r) => r.tier === 'primary');
@@ -58,4 +55,3 @@ export const CONTENT_MAP = ROUTES.reduce((acc, route) => {
     acc[route.id] = route.component;
     return acc;
 }, {} as Record<string, LazyComponent>);
-

@@ -17,6 +17,7 @@ export function SettingData() {
     // 历史日志与统计持久化
     const logEnabled = useSettingToggle(SettingKey.RelayLogKeepEnabled);
     const keepPeriod = useSettingField(SettingKey.RelayLogKeepPeriod);
+    const maxDBSize = useSettingField(SettingKey.RelayLogMaxDBSizeMB);
     const statsInterval = useSettingField(SettingKey.StatsSaveInterval);
     const clearLogs = useClearLogs();
 
@@ -109,9 +110,22 @@ export function SettingData() {
                     onBlur={keepPeriod.save}
                     placeholder={t('log.keepPeriod.placeholder')}
                     className="w-48 rounded-xl"
-                    disabled={!logEnabled.enabled}
                 />
             </SettingRow>
+            <SettingRow icon={Database} label={t('log.maxDBSize.label')} tooltip={t('log.maxDBSize.hint')}>
+                <Input
+                    type="number"
+                    min={1}
+                    max={1048576}
+                    step={1}
+                    value={maxDBSize.value}
+                    onChange={(event) => maxDBSize.setValue(event.target.value)}
+                    onBlur={maxDBSize.save}
+                    placeholder="1024"
+                    className="w-48 rounded-xl"
+                />
+            </SettingRow>
+            <p className="text-xs text-muted-foreground">{t('log.maxDBSize.description')}</p>
             <SettingRow icon={Trash2} label={t('log.clear.label')}>
                 <Button
                     variant="destructive"

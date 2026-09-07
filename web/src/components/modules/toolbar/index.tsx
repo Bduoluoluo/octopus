@@ -134,33 +134,13 @@ export function Toolbar() {
 
     const isLogToolbar = toolbarItem === 'log';
     const showLayoutOptions = toolbarItem === 'channel' || toolbarItem === 'model';
-    const showSiteSortOptions = toolbarItem === 'site';
+    const showSiteSortOptions = false;
     const showCombinedSortOptions = toolbarItem === 'channel' || toolbarItem === 'group';
     const showSortOptions = !isLogToolbar;
 
     // 构建工具栏按钮配置
     const actions = useMemo((): ToolbarAction[] => {
         const result: ToolbarAction[] = [];
-
-        // 站点页面按钮
-        if (toolbarItem === 'site') {
-            result.push(
-                {
-                    id: 'proxy-pool',
-                    icon: <Network className="size-4" />,
-                    label: tProxyPool('name'),
-                    onClick: () => openProxyPool(),
-                    priority: 'large', // xl以上可见
-                },
-                {
-                    id: 'create-site',
-                    icon: <Plus className="size-4" />,
-                    label: '新增站点',
-                    onClick: requestOpenCreateSite,
-                    priority: 'desktop', // md以上可见
-                }
-            );
-        }
 
         // 渠道页面按钮
         if (toolbarItem === 'channel') {
@@ -177,6 +157,12 @@ export function Toolbar() {
             }
 
             result.push({
+                id: 'proxy-pool',
+                icon: <Network className="size-4" />,
+                label: tProxyPool('name'),
+                onClick: () => openProxyPool(),
+                priority: 'large',
+            }, {
                 id: 'create-channel',
                 icon: <Plus className="size-4" />,
                 label: '新增渠道',
@@ -235,7 +221,6 @@ export function Toolbar() {
         completionPendingCount,
         isLogRefreshing,
         openProxyPool,
-        requestOpenCreateSite,
         openCompletionDialog,
         requestLogRefresh,
         tProxyPool,

@@ -435,6 +435,11 @@
         "label": "Log Retention (days)",
         "placeholder": "Enter days"
       },
+      "maxDBSize": {
+        "label": "Database limit (MiB)",
+        "hint": "When exceeded, the oldest half of the logs is deleted. Default: 1024 MiB (1 GiB).",
+        "description": "Capacity cleanup deletes historical logs only; channels, keys, and statistics are preserved."
+      },
       "clear": {
         "label": "Clear History Logs",
         "button": "Clear",
@@ -486,57 +491,6 @@
     "data": {
       "title": "Data Management"
     },
-    "webdavBackup": {
-      "title": "WebDAV Backup",
-      "url": {
-        "label": "WebDAV URL",
-        "placeholder": "https://dav.example.com/dav"
-      },
-      "username": {
-        "label": "Username",
-        "placeholder": "Username"
-      },
-      "password": {
-        "label": "Password",
-        "placeholder": "Password"
-      },
-      "backupPath": {
-        "label": "Remote Path",
-        "placeholder": "/octopus-backups"
-      },
-      "interval": {
-        "label": "Auto Backup Interval (hours)",
-        "placeholder": "0 = disabled",
-        "description": "Set to 0 to disable auto backup"
-      },
-      "retentionCount": {
-        "label": "Retention Count",
-        "placeholder": "10"
-      },
-      "includeStats": "Include Statistics",
-      "testConnection": "Test Connection",
-      "testSuccess": "Connection successful",
-      "testFailed": "Connection failed",
-      "testing": "Testing...",
-      "triggerBackup": "Backup Now",
-      "triggerSuccess": "Backup successful",
-      "triggerFailed": "Backup failed",
-      "triggering": "Backing up...",
-      "backupList": "Remote Backups",
-      "loading": "Loading...",
-      "loadError": "Failed to load backups",
-      "noBackups": "No backup files found",
-      "restore": "Restore",
-      "restoring": "Restoring...",
-      "restoreSuccess": "Restore successful",
-      "restoreFailed": "Restore failed",
-      "restoreConfirm": "Restore from this backup? Existing data will be incrementally overwritten.",
-      "fileName": "File Name",
-      "fileSize": "Size",
-      "modifiedAt": "Modified",
-      "refresh": "Refresh",
-      "notConfigured": "WebDAV not configured"
-    },
     "colorTheme": {
       "label": "Color theme",
       "hint": "Classic shadcn-style palettes. Works with light/dark mode.",
@@ -552,37 +506,6 @@
         "orange": "Orange",
         "rose": "Rose",
         "violet": "Violet"
-      }
-    },
-    "quickLinks": {
-      "title": "Shortcuts",
-      "hint": "Channels and pricing live under More in the main nav — also available here.",
-      "siteChannel": "Site channels",
-      "siteChannelDesc": "Projected channels · source keys · model routes",
-      "manualChannel": "Manual channels",
-      "manualChannelDesc": "Custom Base URL + keys",
-      "pricing": "Model pricing",
-      "pricingDesc": "Price table and multipliers",
-      "connect": "Connect sites",
-      "connectDesc": "Account sync and check-in"
-    },
-    "accessBundle": {
-      "title": "Access bundle",
-      "hint": "Copy Base URL, access key, and available models for clients.",
-      "baseUrl": "Service URL",
-      "useCurrent": "This page",
-      "apiKey": "Access key",
-      "pickKey": "Select key",
-      "noKey": "No enabled access key yet. Create one above first.",
-      "noModels": "No public groups (models) yet.",
-      "curl": "Sample curl",
-      "copy": "Copy",
-      "copied": "Copied",
-      "copyFailed": "Copy failed",
-      "fields": {
-        "base": "Base URL",
-        "key": "Access key",
-        "models": "Models (public groups)"
       }
     }
   },
