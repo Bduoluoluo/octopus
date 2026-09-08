@@ -822,6 +822,24 @@
     }
   },
   "channel": {
+    "test": {
+      "title": "Model Test",
+      "hint": "Send a real request using the current form without saving first. Upstream charges may apply.",
+      "unsupported": "Model testing is not supported for Embedding channels yet.",
+      "timeoutLabel": "Timeout:",
+      "keyLabel": "Test Key",
+      "modelCount": "{total} models (synced {sync} + custom {custom})",
+      "selectAll": "Select All",
+      "deselectAll": "Deselect All",
+      "selectedCount": "Selected {selected} / {total}",
+      "batchTest": "Batch Test",
+      "testing": "Testing…",
+      "testButtonTitle": "Test this model",
+      "statusUntested": "Not tested",
+      "statusNetwork": "Network error",
+      "noKeys": "No available keys",
+      "noModels": "Add or fetch models first"
+    },
     "tabs": {
       "site": "Site Channels",
       "manual": "Manual Channels"
@@ -923,10 +941,10 @@
       "wsModeOff": "Off",
       "matchRegex": "Match Regex",
       "matchRegexPlaceholder": "Optional: regex pattern to match request model names",
-      "remark": "Remark"
-    },
-    "skipHealthProbe": "Skip health probe",
-    "skipHealthProbeHint": "When enabled, group health checks skip this channel"
+      "remark": "Remark",
+      "skipHealthProbe": "Skip health probe",
+      "skipHealthProbeHint": "When enabled, group health checks skip this channel"
+    }
   },
   "siteChannel": {
     "card": {

@@ -822,6 +822,24 @@
     }
   },
   "channel": {
+    "test": {
+      "title": "模型测试",
+      "hint": "使用当前表单配置发送真实请求，无需先保存；测试可能产生上游费用。",
+      "unsupported": "暂不支持 Embedding 渠道的模型测试。",
+      "timeoutLabel": "单次超时：",
+      "keyLabel": "测试 Key",
+      "modelCount": "{total} 个模型（上游 {sync} + 自定义 {custom}）",
+      "selectAll": "全选",
+      "deselectAll": "全不选",
+      "selectedCount": "已选 {selected} / {total}",
+      "batchTest": "批量测试",
+      "testing": "测试中…",
+      "testButtonTitle": "测试此模型",
+      "statusUntested": "未测试",
+      "statusNetwork": "网络错误",
+      "noKeys": "无可用密钥",
+      "noModels": "请先添加或获取模型"
+    },
     "tabs": {
       "site": "站点渠道",
       "manual": "普通渠道"
@@ -923,10 +941,10 @@
       "wsModeOff": "关闭",
       "matchRegex": "匹配正则",
       "matchRegexPlaceholder": "可选：用于匹配请求模型名称的正则表达式",
-      "remark": "备注"
-    },
-    "skipHealthProbe": "跳过测活",
-    "skipHealthProbeHint": "开启后分组健康检查将跳过此渠道（上游不建议探活时使用）"
+      "remark": "备注",
+      "skipHealthProbe": "跳过测活",
+      "skipHealthProbeHint": "开启后分组健康检查将跳过此渠道（上游不建议探活时使用）"
+    }
   },
   "siteChannel": {
     "card": {

@@ -1,5 +1,6 @@
 import { ChannelType, type AutoGroupType, type Channel, type ChannelWSMode, useFetchModel } from '@/api/endpoints/channel';
 import { ProxySelector } from '@/components/modules/proxy-pool/ProxySelector';
+import { TestPanel } from './TestPanel';
 import {
     Select,
     SelectContent,
@@ -474,6 +475,8 @@ export function ChannelForm({
                     </div>
                 </div>
             </div>
+
+            <TestPanel formData={formData} />
 
             <div className="rounded-xl border bg-card p-4">
                 <ProxySelector

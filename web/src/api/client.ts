@@ -16,8 +16,12 @@ export function setAuthStoreGetter(getter: () => { token: string | null; logout:
 /**
  * 全局错误处理
  */
-const handleError = (error: ApiError) => {
-    console.error('API Error:', error);
+const handleError = (error: ApiError, method: string, path: string) => {
+    const endpoint = path.split(/[?#]/, 1)[0];
+    console.warn(
+        `API request failed: ${method} ${endpoint} (HTTP ${error.code})`,
+        error.rawMessage || error.message || 'Request failed',
+    );
 
     // 401 未授权，调用 store 的 logout
     if (error.code === HttpStatus.UNAUTHORIZED) {
@@ -44,7 +48,7 @@ function isApiErrorParams(value: unknown): value is ApiErrorParams {
 /**
  * 处理响应
  */
-async function handleResponse<T>(response: Response): Promise<T> {
+async function handleResponse<T>(response: Response, method: string, path: string): Promise<T> {
     const contentType = response.headers.get('content-type');
     const isJson = contentType?.includes('application/json');
 
@@ -56,9 +60,9 @@ async function handleResponse<T>(response: Response): Promise<T> {
     }
 
     if (!response.ok) {
-        const rawMessage = (data && typeof data === 'object' && 'message' in data && typeof data.message === 'string')
+        const rawMessage = (data && typeof data === 'object' && 'message' in data && typeof data.message === 'string' && data.message.trim())
             ? data.message
-            : (typeof data === 'string' ? data : response.statusText);
+            : (typeof data === 'string' && data.trim() ? data : response.statusText || `HTTP ${response.status}`);
         const errorCode = (data && typeof data === 'object' && 'error_code' in data && typeof data.error_code === 'string')
             ? data.error_code
             : undefined;
@@ -73,7 +77,7 @@ async function handleResponse<T>(response: Response): Promise<T> {
             message: translateApiErrorCode(errorCode, rawMessage, errorParams),
         };
 
-        handleError(error);
+        handleError(error, method, path);
         throw error;
     }
 
@@ -123,7 +127,7 @@ async function request<T>(
         body,
     });
 
-    return handleResponse<T>(response);
+    return handleResponse<T>(response, method, path);
 }
 
 /**
@@ -160,4 +164,3 @@ export const apiClient = {
     patch: <T>(path: string, data?: unknown, params?: Record<string, string | number | boolean>): Promise<T> =>
         request<T>('PATCH', path, data ? JSON.stringify(data) : undefined, params),
 };
-

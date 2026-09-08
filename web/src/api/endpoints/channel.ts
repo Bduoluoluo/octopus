@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+﻿import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../client';
 import { logger } from '@/lib/logger';
 import { formatCount, formatMoney, formatTime } from '@/lib/utils';
@@ -348,6 +348,27 @@ export function useEnableChannel() {
  * // 在 onSuccess 中获取模型列表
  * fetchModel.data // ['gpt-4', 'gpt-3.5-turbo', ...]
  */
+export type TestModelRequest = {
+    channel_id?: number;
+    channel?: Channel | CreateChannelRequest;
+    model: string;
+    key_index?: number;
+    timeout_ms?: number;
+};
+
+export type TestModelResult = {
+    model: string;
+    status_code: number;
+    delay_ms: number;
+    error?: string;
+};
+
+export function useTestChannelModel() {
+    return useMutation({
+        mutationFn: async (data: TestModelRequest) => apiClient.post<TestModelResult>('/api/v1/channel/test-model', data),
+    });
+}
+
 export function useFetchModel() {
     return useMutation({
         mutationFn: async (data: FetchModelRequest) => {
