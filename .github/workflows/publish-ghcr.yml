@@ -1,0 +1,134 @@
+name: Publish GHCR
+
+on:
+  push:
+    branches: [dev]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: publish-ghcr
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Set image metadata
+        id: image
+        env:
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          echo "name=ghcr.io/${REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+          echo "version=dev-${GITHUB_SHA:0:12}" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.1.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+
+      - name: Build frontend
+        working-directory: web
+        env:
+          NEXT_PUBLIC_API_BASE_URL: "."
+          NEXT_PUBLIC_APP_VERSION: ${{ steps.image.outputs.version }}
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+
+      - name: Embed frontend
+        run: |
+          rm -rf static/out
+          mv web/out static/out
+
+      - name: Build Linux binaries
+        env:
+          VERSION: ${{ steps.image.outputs.version }}
+          AUTHOR: ${{ github.repository_owner }}
+          GOOS: linux
+          CGO_ENABLED: 0
+        run: |
+          set -euo pipefail
+          BUILD_TIME="$(TZ='Asia/Shanghai' date +'%F %T %z')"
+          LDFLAGS="-X 'github.com/xuanli27/octopus/internal/conf.Version=${VERSION}' \
+                   -X 'github.com/xuanli27/octopus/internal/conf.BuildTime=${BUILD_TIME}' \
+                   -X 'github.com/xuanli27/octopus/internal/conf.Author=${AUTHOR}' \
+                   -X 'github.com/xuanli27/octopus/internal/conf.Commit=${GITHUB_SHA:0:12}' \
+                   -s -w"
+          for architecture in amd64 arm64; do
+            mkdir -p "build/docker/linux/${architecture}"
+            GOARCH="${architecture}" go build -mod=readonly -tags=jsoniter -ldflags="${LDFLAGS}" -o "build/docker/linux/${architecture}/octopus" .
+          done
+
+      - name: Docker metadata (Debian)
+        id: debian
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.image.outputs.name }}
+          tags: |
+            type=raw,value=latest
+            type=raw,value=sha-${{ github.sha }}
+
+      - name: Docker metadata (Alpine)
+        id: alpine
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.image.outputs.name }}
+          tags: |
+            type=raw,value=latest-alpine
+            type=raw,value=sha-${{ github.sha }}-alpine
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish Debian image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./scripts/dockerfiles/Dockerfile.debian
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.debian.outputs.tags }}
+          labels: ${{ steps.debian.outputs.labels }}
+
+      - name: Publish Alpine image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./scripts/dockerfiles/Dockerfile.alpine
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.alpine.outputs.tags }}
+          labels: ${{ steps.alpine.outputs.labels }}

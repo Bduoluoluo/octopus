@@ -1,11 +1,9 @@
 services:
   octopus:
-    # Docker Hub (default). Alpine: qianduzzz/octopus:latest-alpine
-    # GHCR alternative: ghcr.io/xuanli27/octopus
-    image: qianduzzz/octopus:latest
+    image: ghcr.io/bduoluoluo/octopus:latest
     ports:
        - '8080:8080'
-    volumes:      
-       - '/path/to/data:/app/data'
+    volumes:
+       - './data:/app/data'
     container_name: octopus
     restart: unless-stopped
