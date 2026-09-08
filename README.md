@@ -79,14 +79,14 @@ Open <http://localhost:8080>. The binary runs independently without Node.js or a
 
 ## Docker
 
-After the `dev` branch is pushed, GitHub Actions publishes the images to GHCR:
+After a GitHub Release is published, GitHub Actions publishes the release images to GHCR:
 
 ```text
 ghcr.io/bduoluoluo/octopus:latest
 ghcr.io/bduoluoluo/octopus:latest-alpine
 ```
 
-The workflow is also available under `Actions > Publish GHCR > Run workflow`. The first package may be private by default; set its visibility to `Public` in GitHub Packages before pulling without login. The workflow uses the built-in `GITHUB_TOKEN` with `packages: write` permission.
+Create a Release with a tag such as `v1.0.0`, or run `Actions > Publish GHCR > Run workflow` and enter an existing tag. Stable releases update `latest`; development pushes publish `dev` only. The first package may be private by default; set its visibility to `Public` in GitHub Packages before pulling without login. The workflow uses the built-in `GITHUB_TOKEN` with `packages: write` permission.
 
 Pull and run the published Debian image:
 
@@ -95,7 +95,7 @@ docker pull ghcr.io/bduoluoluo/octopus:latest
 docker run -d --name octopus -v ./data:/app/data -p 8080:8080 ghcr.io/bduoluoluo/octopus:latest
 ```
 
-Use `latest-alpine` for Alpine. Commit-specific tags are also published as `sha-<commit>` and `sha-<commit>-alpine`.
+Use `latest-alpine` for Alpine. Release-specific tags are also published as `v1.0.0` and `v1.0.0-alpine`; commit-specific tags use `sha-<commit>` and `sha-<commit>-alpine`.
 
 Build the frontend and Linux binary first, then build the image. Run these commands from a Linux shell, WSL, or Git Bash:
 

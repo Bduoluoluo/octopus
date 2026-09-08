@@ -79,14 +79,14 @@ OCTOPUS_DEBUG=false ./octopus start
 
 ## Docker
 
-推送 `dev` 分支后，GitHub Actions 会自动将镜像发布到 GHCR：
+发布 GitHub Release 后，GitHub Actions 会自动将正式镜像发布到 GHCR：
 
 ```text
 ghcr.io/bduoluoluo/octopus:latest
 ghcr.io/bduoluoluo/octopus:latest-alpine
 ```
 
-也可以在仓库的 `Actions > Publish GHCR > Run workflow` 中手动执行。第一次发布的软件包可能默认为私有；如需免登录拉取，请在 GitHub Packages 中将软件包改为 `Public`。该工作流使用 GitHub 内置的 `GITHUB_TOKEN` 和 `packages: write` 权限，不需要额外配置 Token。
+创建带有 `v1.0.0` 等 Tag 的 Release，或在仓库的 `Actions > Publish GHCR > Run workflow` 中输入已有 Tag 手动执行。正式版本会更新 `latest`，开发分支只发布 `dev`。第一次发布的软件包可能默认为私有；如需免登录拉取，请在 GitHub Packages 中将软件包改为 `Public`。该工作流使用 GitHub 内置的 `GITHUB_TOKEN` 和 `packages: write` 权限，不需要额外配置 Token。
 
 拉取并运行 Debian 镜像：
 
@@ -95,7 +95,7 @@ docker pull ghcr.io/bduoluoluo/octopus:latest
 docker run -d --name octopus -v ./data:/app/data -p 8080:8080 ghcr.io/bduoluoluo/octopus:latest
 ```
 
-Alpine 版本使用 `latest-alpine`。每次提交也会发布 `sha-<commit>` 和 `sha-<commit>-alpine` 标签。
+Alpine 版本使用 `latest-alpine`。正式版本也会发布 `v1.0.0` 和 `v1.0.0-alpine` 标签，每次构建还会发布 `sha-<commit>` 和 `sha-<commit>-alpine` 标签。
 
 先构建前端和 Linux 二进制文件，再构建镜像。以下命令请在 Linux、WSL 或 Git Bash 中执行：
 

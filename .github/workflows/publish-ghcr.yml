@@ -3,7 +3,20 @@ name: Publish GHCR
 on:
   push:
     branches: [dev]
+  release:
+    types: [published]
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing release tag to build; leave empty for a development image'
+        required: false
+        default: 'v1.0.0'
+        type: string
+      update_latest:
+        description: 'Update latest tags when publishing a stable version'
+        required: true
+        default: true
+        type: boolean
 
 permissions:
   contents: read
@@ -15,21 +28,61 @@ concurrency:
 
 jobs:
   publish:
-    if: github.ref == 'refs/heads/dev'
     runs-on: ubuntu-latest
     steps:
+      - name: Select source and release channel
+        id: source
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_PRERELEASE: ${{ github.event.release.prerelease }}
+          INPUT_TAG: ${{ inputs.tag }}
+          UPDATE_LATEST: ${{ inputs.update_latest }}
+        run: |
+          set -euo pipefail
+          tag=""
+          stable=false
+          ref="$GITHUB_SHA"
+          if [[ "$EVENT_NAME" == "release" ]]; then
+            tag="$RELEASE_TAG"
+          elif [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            tag="$INPUT_TAG"
+          fi
+          if [[ -n "$tag" ]]; then
+            if [[ ! "$tag" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$ ]] || (( ${#tag} > 110 )); then
+              echo "::error::Expected a release tag such as v1.0.0 or v1.0.1-rc.1"
+              exit 1
+            fi
+            ref="refs/tags/$tag"
+            if [[ "$tag" != *-* && "$RELEASE_PRERELEASE" != "true" ]]; then
+              if [[ "$EVENT_NAME" == "release" || "$UPDATE_LATEST" == "true" ]]; then
+                stable=true
+              fi
+            fi
+          fi
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "stable=$stable" >> "$GITHUB_OUTPUT"
+
       - name: Checkout
         uses: actions/checkout@v5
         with:
+          ref: ${{ steps.source.outputs.ref }}
+          token: ${{ github.token }}
           persist-credentials: false
 
       - name: Set image metadata
         id: image
         env:
           REPOSITORY: ${{ github.repository }}
+          RELEASE_TAG: ${{ steps.source.outputs.tag }}
         run: |
+          set -euo pipefail
+          revision="$(git rev-parse HEAD)"
+          version="${RELEASE_TAG:-dev-${revision:0:12}}"
           echo "name=ghcr.io/${REPOSITORY,,}" >> "$GITHUB_OUTPUT"
-          echo "version=dev-${GITHUB_SHA:0:12}" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "revision=$revision" >> "$GITHUB_OUTPUT"
 
       - name: Setup Go
         uses: actions/setup-go@v6
@@ -67,15 +120,16 @@ jobs:
         env:
           VERSION: ${{ steps.image.outputs.version }}
           AUTHOR: ${{ github.repository_owner }}
+          REVISION: ${{ steps.image.outputs.revision }}
           GOOS: linux
-          CGO_ENABLED: 0
+          CGO_ENABLED: '0'
         run: |
           set -euo pipefail
           BUILD_TIME="$(TZ='Asia/Shanghai' date +'%F %T %z')"
           LDFLAGS="-X 'github.com/xuanli27/octopus/internal/conf.Version=${VERSION}' \
                    -X 'github.com/xuanli27/octopus/internal/conf.BuildTime=${BUILD_TIME}' \
                    -X 'github.com/xuanli27/octopus/internal/conf.Author=${AUTHOR}' \
-                   -X 'github.com/xuanli27/octopus/internal/conf.Commit=${GITHUB_SHA:0:12}' \
+                   -X 'github.com/xuanli27/octopus/internal/conf.Commit=${REVISION:0:12}' \
                    -s -w"
           for architecture in amd64 arm64; do
             mkdir -p "build/docker/linux/${architecture}"
@@ -87,18 +141,32 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ steps.image.outputs.name }}
+          flavor: latest=false
           tags: |
-            type=raw,value=latest
-            type=raw,value=sha-${{ github.sha }}
+            type=raw,value=latest,enable=${{ steps.source.outputs.stable == 'true' }}
+            type=raw,value=dev,enable=${{ steps.source.outputs.tag == '' }}
+            type=raw,value=${{ steps.source.outputs.tag }},enable=${{ steps.source.outputs.tag != '' }}
+            type=raw,value=sha-${{ steps.image.outputs.revision }}
+          labels: |
+            org.opencontainers.image.version=${{ steps.image.outputs.version }}
+            org.opencontainers.image.revision=${{ steps.image.outputs.revision }}
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
 
       - name: Docker metadata (Alpine)
         id: alpine
         uses: docker/metadata-action@v5
         with:
           images: ${{ steps.image.outputs.name }}
+          flavor: latest=false
           tags: |
-            type=raw,value=latest-alpine
-            type=raw,value=sha-${{ github.sha }}-alpine
+            type=raw,value=latest-alpine,enable=${{ steps.source.outputs.stable == 'true' }}
+            type=raw,value=dev-alpine,enable=${{ steps.source.outputs.tag == '' }}
+            type=raw,value=${{ steps.source.outputs.tag }}-alpine,enable=${{ steps.source.outputs.tag != '' }}
+            type=raw,value=sha-${{ steps.image.outputs.revision }}-alpine
+          labels: |
+            org.opencontainers.image.version=${{ steps.image.outputs.version }}
+            org.opencontainers.image.revision=${{ steps.image.outputs.revision }}
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -111,7 +179,7 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          password: ${{ github.token }}
 
       - name: Publish Debian image
         uses: docker/build-push-action@v5
