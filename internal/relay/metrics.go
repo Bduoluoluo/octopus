@@ -29,6 +29,7 @@ type RelayMetrics struct {
 	RawRequest       []byte
 	InternalRequest  *transformerModel.InternalLLMRequest
 	InternalResponse *transformerModel.InternalLLMResponse
+	UpstreamFailed   bool
 
 	// 统计指标
 	ActualModel string
@@ -98,7 +99,7 @@ func (m *RelayMetrics) SetInternalResponse(resp *transformerModel.InternalLLMRes
 	m.InternalResponse = resp
 	m.ActualModel = actualModel
 
-	if resp == nil {
+	if resp == nil || m.UpstreamFailed || resp.Error != nil {
 		return
 	}
 
@@ -141,6 +142,12 @@ func (m *RelayMetrics) Save(ctx context.Context, success bool, err error, attemp
 }
 
 func (m *RelayMetrics) SaveWithChannelStats(ctx context.Context, success bool, err error, attempts []model.ChannelAttempt, updateChannelStats bool) {
+	if m.UpstreamFailed {
+		success = false
+		m.Stats.InputToken, m.Stats.OutputToken = 0, 0
+		m.Stats.InputCost, m.Stats.OutputCost = 0, 0
+		m.BillInputTokens, m.CacheReadTokens, m.CacheWriteTokens = nil, nil, nil
+	}
 	duration := time.Since(m.StartTime)
 
 	globalStats := model.StatsMetrics{

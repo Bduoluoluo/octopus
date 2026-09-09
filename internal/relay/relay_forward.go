@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
 	"github.com/xuanli27/octopus/internal/helper"
 	dbmodel "github.com/xuanli27/octopus/internal/model"
 	"github.com/xuanli27/octopus/internal/relay/balancer"
@@ -234,7 +235,7 @@ func (ra *relayAttempt) handleWSStreamResponseV2(ctx context.Context, reader *ws
 	// Create StreamProcessor
 	processor := stream.NewStreamProcessor(stream.StreamConfig{
 		Source:            stream.NewWSSource(reader),
-		Transform:         transform,
+		Transform:         guardedStreamTransform(transform, false),
 		Writer:            ra.getStreamWriter(),
 		Context:           ctx,
 		FirstTokenTimeout: firstTokenTimeout,
@@ -352,11 +353,16 @@ func (ra *relayAttempt) handleResponsePassthrough(ctx context.Context, response 
 		return fmt.Errorf("failed to read response body: %w", err)
 	}
 
+	if err := upstreamPayloadError(body, ""); err != nil {
+		return err
+	}
+	if len(bytes.TrimSpace(body)) == 0 {
+		return ErrEmptyUpstreamResponse
+	}
 	contentType := response.Header.Get("Content-Type")
 	if contentType == "" {
 		contentType = "application/json"
 	}
-	ra.c.Data(http.StatusOK, contentType, body)
 
 	// Sidecar metrics parse
 	sidecarResp := &http.Response{
@@ -364,11 +370,20 @@ func (ra *relayAttempt) handleResponsePassthrough(ctx context.Context, response 
 		Header:     response.Header.Clone(),
 		Body:       io.NopCloser(bytes.NewReader(body)),
 	}
-	if internalResponse, err := ra.outAdapter.TransformResponse(ctx, sidecarResp); err == nil && internalResponse != nil {
-		ra.inAdapter.TransformResponse(ctx, internalResponse)
-		if cfg.CollectMetrics {
-			ra.collectResponse()
-		}
+	internalResponse, err := ra.outAdapter.TransformResponse(ctx, sidecarResp)
+	if err != nil {
+		return fmt.Errorf("failed to validate upstream response: %w", err)
+	}
+	if internalResponse != nil && internalResponse.Error != nil {
+		return newUpstreamResponseError(internalResponse.Error.Detail, internalResponse.Error.StatusCode)
+	}
+	if isEmptyUpstreamResponse(internalResponse) {
+		return ErrEmptyUpstreamResponse
+	}
+	ra.c.Data(http.StatusOK, contentType, body)
+	ra.inAdapter.TransformResponse(ctx, internalResponse)
+	if cfg.CollectMetrics {
+		ra.collectResponse()
 	}
 
 	return nil

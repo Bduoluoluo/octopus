@@ -2,7 +2,7 @@
 
 LLM API aggregation, protocol conversion, and load balancing.
 
-[简体中文](README_zh.md) | [Repository](https://github.com/Bduoluoluo/octopus)
+[简体中文](README_zh.md)
 
 ## Requirements
 

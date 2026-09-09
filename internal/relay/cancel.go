@@ -78,7 +78,7 @@ func isClientCancellation(ctx context.Context, err error) bool {
 // finish_reason, then the client disconnects and we would otherwise record
 // context canceled as failure (#111 / #116).
 func streamResponseCompleted(resp *model.InternalLLMResponse) bool {
-	if resp == nil {
+	if resp == nil || resp.Error != nil {
 		return false
 	}
 	if len(resp.EmbeddingData) > 0 {
@@ -141,7 +141,7 @@ func choiceHasDeliveredContent(ch *model.Choice) bool {
 // metricsSuggestCompletedStream is used when the request context is canceled in
 // the outer handler loop after an attempt may already have collected usage.
 func metricsSuggestCompletedStream(m *RelayMetrics) bool {
-	if m == nil {
+	if m == nil || m.UpstreamFailed {
 		return false
 	}
 	if streamResponseCompleted(m.InternalResponse) {

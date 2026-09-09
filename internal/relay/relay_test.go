@@ -222,6 +222,7 @@ func TestHandleStreamResponsePassthroughOpenAIResponsesClientCancelAfterTerminal
 		"",
 		`data: {"type":"response.completed","response":{"id":"resp_1","object":"response","model":"gpt-4o","created_at":1,"output":[],"status":"completed","usage":{"input_tokens":3,"output_tokens":5,"total_tokens":8}}}`,
 		"",
+		"",
 	}, "\n")
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -268,6 +269,7 @@ func TestHandleStreamResponsePassthroughOpenAIResponsesClientCancelMidStream(t *
 	}, "\n")
 
 	ctx, cancel := context.WithCancel(context.Background())
+	rawSSE += "\n"
 	defer cancel()
 	writer := &notifyStreamWriter{header: http.Header{}}
 	writer.onWrite = func([]byte) { cancel() }
@@ -310,6 +312,7 @@ func TestHandleStreamResponsePassthroughAnthropicClientCancelAfterTerminal(t *te
 	}, "\n")
 
 	ctx, cancel := context.WithCancel(context.Background())
+	rawSSE += "\n"
 	defer cancel()
 	writer := &notifyStreamWriter{header: http.Header{}}
 	writer.onWrite = func(p []byte) {

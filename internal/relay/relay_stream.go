@@ -10,10 +10,11 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/tmaxmax/go-sse"
 	"github.com/xuanli27/octopus/internal/relay/stream"
 	"github.com/xuanli27/octopus/internal/transformer/model"
 	"github.com/xuanli27/octopus/internal/utils/log"
-	"github.com/tmaxmax/go-sse"
 )
 
 func (ra *relayAttempt) handleStreamResponseV2(ctx context.Context, response *http.Response) error {
@@ -30,7 +31,18 @@ func (ra *relayAttempt) handleStreamResponseV2(ctx context.Context, response *ht
 
 	// Build transform function
 	transform := func(ctx context.Context, data []byte) ([]byte, error) {
-		return ra.transformStreamData(ctx, string(data))
+		var output bytes.Buffer
+		for event, err := range sse.Read(bytes.NewReader(data), &sse.ReadConfig{MaxEventSize: maxSSEEventSize}) {
+			if err != nil {
+				return nil, err
+			}
+			converted, err := ra.transformStreamData(ctx, event.Data)
+			if err != nil {
+				return nil, err
+			}
+			output.Write(converted)
+		}
+		return output.Bytes(), nil
 	}
 
 	// Determine first token timeout
@@ -41,8 +53,8 @@ func (ra *relayAttempt) handleStreamResponseV2(ctx context.Context, response *ht
 
 	// Create StreamProcessor
 	processor := stream.NewStreamProcessor(stream.StreamConfig{
-		Source:            stream.NewSSESource(response.Body, maxSSEEventSize),
-		Transform:         transform,
+		Source:            stream.NewFramedSSESource(response.Body, maxSSEEventSize),
+		Transform:         guardedStreamTransform(transform, true),
 		Writer:            ra.getStreamWriter(),
 		Context:           ctx,
 		FirstTokenTimeout: firstTokenTimeout,
@@ -102,8 +114,8 @@ func (ra *relayAttempt) handleStreamResponsePassthroughV2(ctx context.Context, r
 
 	// Create StreamProcessor
 	processor := stream.NewStreamProcessor(stream.StreamConfig{
-		Source:            stream.NewRawSource(response.Body, 32*1024),
-		Transform:         nil, // Passthrough: no transformation
+		Source:            stream.NewFramedSSESource(response.Body, maxSSEEventSize),
+		Transform:         guardedStreamTransform(nil, true),
 		Writer:            ra.getStreamWriter(),
 		Context:           ctx,
 		FirstTokenTimeout: firstTokenTimeout,
@@ -204,6 +216,9 @@ func (ra *relayAttempt) collectPassthroughMetrics(ctx context.Context, rawStream
 
 // transformStreamData 转换流式数据
 func (ra *relayAttempt) transformStreamData(ctx context.Context, data string) ([]byte, error) {
+	if err := upstreamPayloadError([]byte(data), ""); err != nil {
+		return nil, err
+	}
 	events, ok, err := ra.decodeOutboundStreamEvents(ctx, []byte(data))
 	if err != nil {
 		log.Warnf("failed to transform stream events: %v", err)
@@ -241,6 +256,14 @@ func (ra *relayAttempt) decodeOutboundStreamEvents(ctx context.Context, data []b
 }
 
 func (ra *relayAttempt) encodeInboundStreamEvents(ctx context.Context, events []model.StreamEvent) ([]byte, error) {
+	for _, event := range events {
+		if event.Error != nil {
+			return nil, newUpstreamResponseError(event.Error.Detail, event.Error.StatusCode)
+		}
+		if event.Kind == model.StreamEventKindError {
+			return nil, newUpstreamResponseError(model.ErrorDetail{Message: "upstream stream error"}, 0)
+		}
+	}
 	if len(events) == 0 {
 		return nil, nil
 	}
@@ -261,6 +284,9 @@ func (ra *relayAttempt) decodeOutboundStreamResponse(ctx context.Context, data [
 }
 
 func (ra *relayAttempt) encodeInboundStreamResponse(ctx context.Context, internalStream *model.InternalLLMResponse) ([]byte, error) {
+	if internalStream.Error != nil {
+		return nil, newUpstreamResponseError(internalStream.Error.Detail, internalStream.Error.StatusCode)
+	}
 	inStream, err := ra.inAdapter.TransformStream(ctx, internalStream)
 	if err != nil {
 		log.Warnf("failed to transform stream: %v", err)
@@ -271,6 +297,14 @@ func (ra *relayAttempt) encodeInboundStreamResponse(ctx context.Context, interna
 
 // handleResponse 处理非流式响应
 func (ra *relayAttempt) handleResponse(ctx context.Context, response *http.Response) error {
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read response body: %w", err)
+	}
+	if err := upstreamPayloadError(body, ""); err != nil {
+		return err
+	}
+	response.Body = io.NopCloser(bytes.NewReader(body))
 	internalResponse, err := ra.outAdapter.TransformResponse(ctx, response)
 	if err != nil {
 		log.Warnf("failed to transform response: %v", err)
@@ -280,6 +314,9 @@ func (ra *relayAttempt) handleResponse(ctx context.Context, response *http.Respo
 	// Issue #100: hollow 200 bodies (empty id/model/choices) used to be forwarded
 	// as success and killed local sessions. Treat as retryable upstream failure
 	// before anything is written to the client.
+	if internalResponse != nil && internalResponse.Error != nil {
+		return newUpstreamResponseError(internalResponse.Error.Detail, internalResponse.Error.StatusCode)
+	}
 	if isEmptyUpstreamResponse(internalResponse) {
 		log.Warnf("empty upstream response from channel %s", ra.channel.Name)
 		return ErrEmptyUpstreamResponse

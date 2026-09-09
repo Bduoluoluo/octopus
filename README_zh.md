@@ -2,7 +2,7 @@
 
 LLM API 聚合、协议转换和负载均衡服务。
 
-[English](README.md) | [项目仓库](https://github.com/Bduoluoluo/octopus)
+[English](README.md)
 
 ## 环境要求
 

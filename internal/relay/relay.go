@@ -1,11 +1,15 @@
 package relay
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/gin-gonic/gin"
 	dbmodel "github.com/xuanli27/octopus/internal/model"
 	"github.com/xuanli27/octopus/internal/op"
 	"github.com/xuanli27/octopus/internal/outlierwindow"
@@ -15,7 +19,6 @@ import (
 	"github.com/xuanli27/octopus/internal/transformer/model"
 	"github.com/xuanli27/octopus/internal/transformer/outbound"
 	"github.com/xuanli27/octopus/internal/utils/log"
-	"github.com/gin-gonic/gin"
 )
 
 func Handler(inboundType inbound.InboundType, c *gin.Context) {
@@ -379,10 +382,16 @@ func circuitFailureKind(retryEnabled bool, statusCode int) balancer.FailureKind 
 
 // attempt 统一管理一次通道尝试的完整生命周期
 func (ra *relayAttempt) attempt() attemptResult {
+	ra.metrics.UpstreamFailed = false
 	span := ra.iter.StartAttempt(ra.channel.ID, ra.usedKey.ID, ra.channel.Name)
 
 	// 转发请求
 	statusCode, fwdErr := ra.forward()
+	var upstreamErr *model.ResponseError
+	if errors.As(fwdErr, &upstreamErr) {
+		statusCode = newUpstreamResponseError(upstreamErr.Detail, upstreamErr.StatusCode).StatusCode
+		ra.metrics.UpstreamFailed = true
+	}
 
 	// 更新 channel key 状态
 	ra.usedKey.StatusCode = statusCode
@@ -431,7 +440,7 @@ func (ra *relayAttempt) attempt() attemptResult {
 		}
 	}
 
-	if isClientCancellation(ra.requestContext(), fwdErr) {
+	if upstreamErr == nil && isClientCancellation(ra.requestContext(), fwdErr) {
 		written := ra.streamPayloadWritten.Load()
 		if written {
 			ra.collectResponse()
@@ -504,6 +513,11 @@ func (ra *relayAttempt) attempt() attemptResult {
 	written := ra.streamPayloadWritten.Load()
 	if written {
 		ra.collectResponse()
+		if upstreamErr != nil {
+			payload, _ := json.Marshal(map[string]any{"type": "error", "error": upstreamErr.Detail})
+			_, _ = ra.getStreamWriter().Write(append(append([]byte("event: error\ndata: "), payload...), '\n', '\n'))
+			ra.getStreamWriter().Flush()
+		}
 	}
 	return attemptResult{
 		Success:           false,
