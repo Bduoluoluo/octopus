@@ -113,6 +113,14 @@ func streamEventHasContent(data []byte, eventType string) bool {
 	switch payload.Type {
 	case "ping", "message_start", "content_block_stop", "response.created", "response.in_progress", "response.queued", "response.content_part.added":
 		return false
+	case "message_delta":
+		var delta struct {
+			StopReason *string `json:"stop_reason"`
+		}
+		if json.Unmarshal(payload.Delta, &delta) != nil {
+			return false
+		}
+		return delta.StopReason != nil && strings.TrimSpace(*delta.StopReason) != ""
 	case "response.output_text.delta", "response.reasoning_text.delta", "response.reasoning_summary_text.delta", "response.refusal.delta":
 		var delta string
 		return json.Unmarshal(payload.Delta, &delta) == nil && delta != ""

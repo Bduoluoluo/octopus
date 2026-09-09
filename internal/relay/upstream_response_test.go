@@ -121,6 +121,12 @@ func TestUpstreamStreamPreambleAndLegitimateContent(t *testing.T) {
 		content bool
 	}{
 		{`{"choices":[{"delta":{"role":"assistant","content":""}}]}`, false},
+		{`{"type":"message_delta","usage":{"output_tokens":12}}`, false},
+		{`{"type":"message_delta","delta":{},"usage":{"output_tokens":12}}`, false},
+		{`{"type":"message_delta","delta":{"stop_reason":null},"usage":{"output_tokens":12}}`, false},
+		{`{"type":"message_delta","delta":{"stop_reason":""},"usage":{"output_tokens":12}}`, false},
+		{`{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":12}}`, true},
+		{`{"type":"message_delta","delta":{"stop_reason":"max_tokens"},"usage":{"output_tokens":12}}`, true},
 		{`{"type":"response.output_text.delta","delta":""}`, false},
 		{`{"type":"content_block_delta","delta":{"type":"text_delta","text":""}}`, false},
 		{`{"type":"content_block_start","content_block":{"type":"text","text":""}}`, false},
@@ -137,10 +143,10 @@ func TestUpstreamStreamPreambleAndLegitimateContent(t *testing.T) {
 }
 
 func TestUpstreamErrorFailoverAndAccounting(t *testing.T) {
-	for _, mode := range []struct{ streaming, partial bool }{{false, false}, {true, false}, {true, true}} {
+	for _, mode := range []struct{ streaming, partial, usageOnly, convert bool }{{false, false, false, false}, {true, false, false, false}, {true, true, false, false}, {true, false, true, false}, {true, false, true, true}} {
 		streaming, partial := mode.streaming, mode.partial
 		for _, fallback := range []bool{false, true} {
-			t.Run(fmt.Sprintf("stream=%t/partial=%t/fallback=%t", streaming, partial, fallback), func(t *testing.T) {
+			t.Run(fmt.Sprintf("stream=%t/partial=%t/usage=%t/convert=%t/fallback=%t", streaming, partial, mode.usageOnly, mode.convert, fallback), func(t *testing.T) {
 				ctx := setupRelayTestDB(t)
 				if err := op.LLMCreate(dbmodel.LLMInfo{Name: "test-model", LLMPrice: dbmodel.LLMPrice{Input: 1000000, Output: 2000000}}, ctx); err != nil {
 					t.Fatal(err)
@@ -153,6 +159,12 @@ func TestUpstreamErrorFailoverAndAccounting(t *testing.T) {
 						writer.Header().Set("Content-Type", "text/event-stream")
 						_, _ = io.WriteString(writer, "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"bad\",\"role\":\"assistant\",\"content\":[],\"usage\":{\"input_tokens\":999}}}\n\n")
 						writer.(http.Flusher).Flush()
+						if mode.usageOnly {
+							_, _ = io.WriteString(writer, "event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":null},\"usage\":{\"output_tokens\":999}}\n\n")
+							writer.(http.Flusher).Flush()
+							_, _ = io.WriteString(writer, "event: error\ndata: {\"type\":\"error\",\"error\":{\"code\":\"upstream_error\",\"message\":\"Upstream request failed\"}}\n\n")
+							return
+						}
 						if partial {
 							_, _ = io.WriteString(writer, "data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"partial-output\"}}\n\n")
 							_, _ = io.WriteString(writer, "data: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":999}}\n\n")
@@ -200,11 +212,19 @@ func TestUpstreamErrorFailoverAndAccounting(t *testing.T) {
 				client, _ := gin.CreateTestContext(recorder)
 				client.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", strings.NewReader(fmt.Sprintf(`{"model":"guard-failover","max_tokens":64,"stream":%t,"messages":[{"role":"user","content":"hello"}]}`, streaming)))
 				client.Request.Header.Set("Content-Type", "application/json")
-				Handler(inbound.InboundTypeAnthropic, client)
+				inType := inbound.InboundTypeAnthropic
+				if mode.convert {
+					inType = inbound.InboundTypeOpenAIChat
+				}
+				Handler(inType, client)
 				if firstHits.Load() != 1 {
 					t.Fatalf("first hits=%d", firstHits.Load())
 				}
 				stats := op.StatsAPIKeyGet(0)
+				expectedStatus := 429
+				if mode.usageOnly {
+					expectedStatus = 502
+				}
 				if partial {
 					if secondHits.Load() != 0 || !strings.Contains(recorder.Body.String(), "event: error") || stats.RequestSuccess != 0 || stats.RequestFailed != 1 || stats.InputToken != 0 || stats.OutputToken != 0 || stats.InputCost != 0 || stats.OutputCost != 0 {
 						t.Fatalf("partial failure hidden or billed: %s stats=%+v", recorder.Body.String(), stats)
@@ -216,7 +236,7 @@ func TestUpstreamErrorFailoverAndAccounting(t *testing.T) {
 					if stats.InputToken != 3 || stats.OutputToken != 2 || stats.InputCost != 3 || stats.OutputCost != 4 || stats.RequestSuccess != 1 {
 						t.Fatalf("unexpected stats: %+v", stats)
 					}
-				} else if recorder.Code != 429 || stats.RequestFailed != 1 || stats.InputToken != 0 || stats.InputCost != 0 || stats.RequestSuccess != 0 {
+				} else if recorder.Code != expectedStatus || stats.RequestFailed != 1 || stats.InputToken != 0 || stats.InputCost != 0 || stats.RequestSuccess != 0 {
 					t.Fatalf("failure counted as success: status=%d stats=%+v", recorder.Code, stats)
 				}
 				for index, original := range channels {
@@ -234,5 +254,55 @@ func TestUpstreamErrorFailoverAndAccounting(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestUpstreamUsageThenBadGatewayBeforeContent(t *testing.T) {
+	for _, inType := range []inbound.InboundType{inbound.InboundTypeAnthropic, inbound.InboundTypeOpenAIChat} {
+		t.Run(fmt.Sprint(inType), func(t *testing.T) {
+			attempt, recorder := newEmptyStreamTestAttempt(t, inType, model.APIFormatAnthropicMessage, outbound.OutboundTypeAnthropic)
+			body := "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"bad\",\"role\":\"assistant\",\"content\":[],\"usage\":{\"input_tokens\":999}}}\n\n" +
+				"event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":null},\"usage\":{\"output_tokens\":999}}\n\n" +
+				"event: error\ndata: {\"type\":\"error\",\"error\":{\"code\":\"upstream_error\",\"message\":\"Upstream request failed\"}}\n\n"
+			var err error
+			if inType == inbound.InboundTypeAnthropic {
+				err = attempt.handleStreamResponsePassthroughV2(context.Background(), sseTestResponse(body), model.PassthroughConfig{CollectMetrics: true})
+			} else {
+				err = attempt.handleStreamResponseV2(context.Background(), sseTestResponse(body))
+			}
+			var upstreamErr *model.ResponseError
+			if !errors.As(err, &upstreamErr) || upstreamErr.StatusCode != 502 || !isRetryableStatus(upstreamErr.StatusCode) {
+				t.Fatalf("expected retryable 502, got %v", err)
+			}
+			if err.Error() != "transform error: Request failed: Bad Gateway, error: Upstream request failed, code: upstream_error" {
+				t.Fatalf("unexpected diagnostic: %v", err)
+			}
+			if recorder.Body.Len() != 0 || attempt.streamPayloadWritten.Load() {
+				t.Fatalf("usage blocked failover: %q", recorder.Body.String())
+			}
+		})
+	}
+}
+
+func TestUpstreamBufferedUsagePreservesSuccessfulStream(t *testing.T) {
+	for _, terminalOnly := range []bool{false, true} {
+		t.Run(fmt.Sprint(terminalOnly), func(t *testing.T) {
+			attempt, recorder := newEmptyStreamTestAttempt(t, inbound.InboundTypeAnthropic, model.APIFormatAnthropicMessage, outbound.OutboundTypeAnthropic)
+			body := "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"good\",\"type\":\"message\",\"role\":\"assistant\",\"model\":\"test-model\",\"content\":[],\"usage\":{\"input_tokens\":3}}}\n\n" +
+				"event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":null},\"usage\":{\"output_tokens\":1}}\n\n"
+			if !terminalOnly {
+				body += "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"hello\"}}\n\n"
+			}
+			body += "event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":2}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+			if err := attempt.handleStreamResponsePassthroughV2(context.Background(), sseTestResponse(body), model.PassthroughConfig{CollectMetrics: true}); err != nil {
+				t.Fatal(err)
+			}
+			if recorder.Body.String() != body {
+				t.Fatalf("successful SSE changed: %q", recorder.Body.String())
+			}
+			if attempt.metrics.Stats.InputToken != 3 || attempt.metrics.Stats.OutputToken != 2 {
+				t.Fatalf("usage lost: %+v", attempt.metrics.Stats)
+			}
+		})
 	}
 }
