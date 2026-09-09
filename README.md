@@ -79,14 +79,24 @@ Open <http://localhost:8080>. The binary runs independently without Node.js or a
 
 ## Docker
 
-After a GitHub Release is published, GitHub Actions publishes the release images to GHCR:
+Push a version tag such as `v1.0.1` to publish the matching images to GHCR:
 
 ```text
 ghcr.io/bduoluoluo/octopus:latest
 ghcr.io/bduoluoluo/octopus:latest-alpine
 ```
 
-Create a Release with a tag such as `v1.0.0`, or run `Actions > Publish GHCR > Run workflow` and enter an existing tag. Stable releases update `latest`; development pushes publish `dev` only. The first package may be private by default; set its visibility to `Public` in GitHub Packages before pulling without login. The workflow uses the built-in `GITHUB_TOKEN` with `packages: write` permission.
+The recommended release flow is:
+
+```bash
+git add .
+git commit -m "Release v1.0.1"
+git push origin dev
+git tag v1.0.1
+git push origin v1.0.1
+```
+
+The tag push publishes `v1.0.1` and `v1.0.1-alpine`, and also updates `latest` and `latest-alpine` for stable tags. Prerelease tags such as `v1.0.1-rc.1` do not update `latest`. Ordinary branch pushes do not publish a GHCR image. You can also run `Actions > Publish GHCR > Run workflow` and enter an existing version tag. The first package may be private by default; set its visibility to `Public` in GitHub Packages before pulling without login. The workflow uses the built-in `GITHUB_TOKEN` with `packages: write` permission.
 
 Pull and run the published Debian image:
 

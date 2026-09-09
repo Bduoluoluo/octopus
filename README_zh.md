@@ -79,14 +79,24 @@ OCTOPUS_DEBUG=false ./octopus start
 
 ## Docker
 
-发布 GitHub Release 后，GitHub Actions 会自动将正式镜像发布到 GHCR：
+推送 `v1.0.1` 这样的版本标签后，GitHub Actions 会将对应版本镜像发布到 GHCR：
 
 ```text
 ghcr.io/bduoluoluo/octopus:latest
 ghcr.io/bduoluoluo/octopus:latest-alpine
 ```
 
-创建带有 `v1.0.0` 等 Tag 的 Release，或在仓库的 `Actions > Publish GHCR > Run workflow` 中输入已有 Tag 手动执行。正式版本会更新 `latest`，开发分支只发布 `dev`。第一次发布的软件包可能默认为私有；如需免登录拉取，请在 GitHub Packages 中将软件包改为 `Public`。该工作流使用 GitHub 内置的 `GITHUB_TOKEN` 和 `packages: write` 权限，不需要额外配置 Token。
+推荐的发布流程如下：
+
+```bash
+git add .
+git commit -m "Release v1.0.1"
+git push origin dev
+git tag v1.0.1
+git push origin v1.0.1
+```
+
+推送版本标签会发布 `v1.0.1` 和 `v1.0.1-alpine`，正式版本标签还会更新 `latest` 和 `latest-alpine`。`v1.0.1-rc.1` 这类预发布标签不会更新 `latest`。普通分支 push 不会发布 GHCR 镜像。也可以在仓库的 `Actions > Publish GHCR > Run workflow` 中输入已有版本标签手动执行。第一次发布的软件包可能默认为私有；如需免登录拉取，请在 GitHub Packages 中将软件包改为 `Public`。该工作流使用 GitHub 内置的 `GITHUB_TOKEN` 和 `packages: write` 权限，不需要额外配置 Token。
 
 拉取并运行 Debian 镜像：
 
