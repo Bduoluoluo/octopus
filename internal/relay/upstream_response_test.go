@@ -14,6 +14,7 @@ import (
 	"github.com/gin-gonic/gin"
 	dbmodel "github.com/xuanli27/octopus/internal/model"
 	"github.com/xuanli27/octopus/internal/op"
+	"github.com/xuanli27/octopus/internal/relay/stream"
 	"github.com/xuanli27/octopus/internal/transformer/inbound"
 	"github.com/xuanli27/octopus/internal/transformer/model"
 	"github.com/xuanli27/octopus/internal/transformer/outbound"
@@ -125,9 +126,16 @@ func TestUpstreamStreamPreambleAndLegitimateContent(t *testing.T) {
 		{`{"type":"message_delta","delta":{},"usage":{"output_tokens":12}}`, false},
 		{`{"type":"message_delta","delta":{"stop_reason":null},"usage":{"output_tokens":12}}`, false},
 		{`{"type":"message_delta","delta":{"stop_reason":""},"usage":{"output_tokens":12}}`, false},
-		{`{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":12}}`, true},
-		{`{"type":"message_delta","delta":{"stop_reason":"max_tokens"},"usage":{"output_tokens":12}}`, true},
+		{`{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":12}}`, false},
+		{`{"type":"message_delta","delta":{"stop_reason":"max_tokens"},"usage":{"output_tokens":12}}`, false},
+		{`[DONE]`, false},
+		{`{"type":"message_stop"}`, false},
+		{`{"choices":[{"delta":{},"finish_reason":"stop"}]}`, false},
+		{`{"candidates":[{"finishReason":"STOP"}]}`, false},
+		{`{"type":"content_block_delta","delta":{"type":"signature_delta","signature":"opaque-signature"}}`, false},
 		{`{"type":"response.output_text.delta","delta":""}`, false},
+		{`{"type":"response.output_text.delta","delta":" \n\t"}`, false},
+		{`{"type":"response.reasoning_summary_text.delta","delta":" \n"}`, false},
 		{`{"type":"response.reasoning_summary_part.added","part":{"type":"summary_text","text":""}}`, false},
 		{`{"type":"response.output_text.done","text":""}`, false},
 		{`{"type":"response.output_item.added","item":{}}`, false},
@@ -146,7 +154,9 @@ func TestUpstreamStreamPreambleAndLegitimateContent(t *testing.T) {
 		{`{"type":"response.function_call_arguments.delta","delta":"{}"}`, true},
 		{`{"type":"response.output_audio.delta","delta":"encoded-audio"}`, true},
 		{`{"type":"response.reasoning_summary_text.delta","delta":"Thinking"}`, true},
-		{`{"type":"response.completed","response":{"status":"completed"}}`, true},
+		{`{"type":"response.completed","response":{"status":"completed"}}`, false},
+		{`{"type":"response.completed","response":{"status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":"hello"}]}]}}`, true},
+		{`{"type":"response.output_text.done","text":"hello"}`, true},
 		{`{"candidates":[{"content":{"parts":[{"text":"hello"}]}}]}`, true},
 		{`{"candidates":[{"content":{"parts":[{"functionCall":{"name":"search","args":{}}}]}}]}`, true},
 	} {
@@ -188,10 +198,10 @@ func TestResponsesPreambleErrorRemainsUnwritten(t *testing.T) {
 }
 
 func TestUpstreamErrorFailoverAndAccounting(t *testing.T) {
-	for _, mode := range []struct{ streaming, partial, usageOnly, convert, metadataOnly bool }{{false, false, false, false, false}, {true, false, false, false, false}, {true, true, false, false, false}, {true, false, true, false, false}, {true, false, true, true, false}, {true, false, true, false, true}, {true, false, true, true, true}} {
+	for _, mode := range []struct{ streaming, partial, usageOnly, convert, metadataOnly, emptyFinish bool }{{false, false, false, false, false, false}, {true, false, false, false, false, false}, {true, true, false, false, false, false}, {true, false, true, false, false, false}, {true, false, true, true, false, false}, {true, false, true, false, true, false}, {true, false, true, true, true, false}, {true, false, true, false, false, true}, {true, false, true, true, false, true}} {
 		streaming, partial := mode.streaming, mode.partial
 		for _, fallback := range []bool{false, true} {
-			t.Run(fmt.Sprintf("stream=%t/partial=%t/usage=%t/convert=%t/metadata=%t/fallback=%t", streaming, partial, mode.usageOnly, mode.convert, mode.metadataOnly, fallback), func(t *testing.T) {
+			t.Run(fmt.Sprintf("stream=%t/partial=%t/usage=%t/convert=%t/metadata=%t/emptyFinish=%t/fallback=%t", streaming, partial, mode.usageOnly, mode.convert, mode.metadataOnly, mode.emptyFinish, fallback), func(t *testing.T) {
 				ctx := setupRelayTestDB(t)
 				if err := op.LLMCreate(dbmodel.LLMInfo{Name: "test-model", LLMPrice: dbmodel.LLMPrice{Input: 1000000, Output: 2000000}}, ctx); err != nil {
 					t.Fatal(err)
@@ -205,6 +215,10 @@ func TestUpstreamErrorFailoverAndAccounting(t *testing.T) {
 						_, _ = io.WriteString(writer, "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"bad\",\"role\":\"assistant\",\"content\":[],\"usage\":{\"input_tokens\":999}}}\n\n")
 						writer.(http.Flusher).Flush()
 						if mode.usageOnly {
+							if mode.emptyFinish {
+								_, _ = io.WriteString(writer, "data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"signature_delta\",\"signature\":\"opaque\"}}\n\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":999}}\n\n")
+								writer.(http.Flusher).Flush()
+							}
 							if mode.metadataOnly {
 								_, _ = io.WriteString(writer, "event: upstream.keepalive\ndata: {\"type\":\"upstream.keepalive\"}\n\n")
 								writer.(http.Flusher).Flush()
@@ -343,7 +357,14 @@ func TestUpstreamBufferedUsagePreservesSuccessfulStream(t *testing.T) {
 				body += "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"hello\"}}\n\n"
 			}
 			body += "event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":2}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
-			if err := attempt.handleStreamResponsePassthroughV2(context.Background(), sseTestResponse(body), model.PassthroughConfig{CollectMetrics: true}); err != nil {
+			err := attempt.handleStreamResponsePassthroughV2(context.Background(), sseTestResponse(body), model.PassthroughConfig{CollectMetrics: true})
+			if terminalOnly {
+				if !errors.Is(err, stream.ErrEmptyUpstreamStream) || recorder.Body.Len() != 0 || attempt.streamPayloadWritten.Load() {
+					t.Fatalf("empty terminal stream committed: err=%v body=%q", err, recorder.Body.String())
+				}
+				return
+			}
+			if err != nil {
 				t.Fatal(err)
 			}
 			if recorder.Body.String() != body {

@@ -93,13 +93,12 @@ func newUpstreamResponseError(detail model.ErrorDetail, code int) *model.Respons
 
 func streamEventHasContent(data []byte, eventType string) bool {
 	if string(bytes.TrimSpace(data)) == "[DONE]" {
-		return true
+		return false
 	}
 	var payload struct {
 		Type    string `json:"type"`
 		Choices []struct {
-			Delta        model.Message `json:"delta"`
-			FinishReason *string       `json:"finish_reason"`
+			Delta model.Message `json:"delta"`
 		} `json:"choices"`
 		Delta        json.RawMessage           `json:"delta"`
 		ContentBlock *model.StreamContentBlock `json:"content_block"`
@@ -113,38 +112,39 @@ func streamEventHasContent(data []byte, eventType string) bool {
 	switch payload.Type {
 	case "ping", "message_start", "content_block_stop", "response.created", "response.in_progress", "response.queued", "response.content_part.added":
 		return false
-	case "message_stop", "response.completed", "response.done", "response.incomplete":
-		return true
-	case "message_delta":
-		var delta struct {
-			StopReason *string `json:"stop_reason"`
-		}
-		if json.Unmarshal(payload.Delta, &delta) != nil {
-			return false
-		}
-		return delta.StopReason != nil && strings.TrimSpace(*delta.StopReason) != ""
+	case "message_stop", "message_delta":
+		return false
+	case "response.completed", "response.done", "response.incomplete", "response.output_item.done", "response.content_part.done",
+		"response.output_text.done", "response.refusal.done", "response.reasoning_text.done", "response.reasoning_summary_text.done":
+		var output streamOutputPayload
+		return json.Unmarshal(data, &output) == nil && output.hasContent()
 	case "response.output_text.delta", "response.reasoning_text.delta", "response.reasoning_summary_text.delta", "response.refusal.delta",
 		"response.function_call_arguments.delta", "response.custom_tool_call_input.delta", "response.output_audio.delta", "response.audio.delta",
 		"response.output_audio_transcript.delta", "response.audio_transcript.delta", "response.code_interpreter_call_code.delta":
 		var delta string
-		return json.Unmarshal(payload.Delta, &delta) == nil && delta != ""
+		if json.Unmarshal(payload.Delta, &delta) != nil {
+			return false
+		}
+		if strings.HasSuffix(payload.Type, ".function_call_arguments.delta") || strings.HasSuffix(payload.Type, ".custom_tool_call_input.delta") {
+			return delta != ""
+		}
+		return strings.TrimSpace(delta) != ""
 	case "content_block_delta":
 		var delta struct {
 			Text        string `json:"text"`
 			Thinking    string `json:"thinking"`
 			PartialJSON string `json:"partial_json"`
-			Signature   string `json:"signature"`
 		}
 		if json.Unmarshal(payload.Delta, &delta) != nil {
 			return false
 		}
-		return delta.Text != "" || delta.Thinking != "" || delta.PartialJSON != "" || delta.Signature != ""
+		return strings.TrimSpace(delta.Text) != "" || strings.TrimSpace(delta.Thinking) != "" || strings.TrimSpace(delta.PartialJSON) != ""
 	case "content_block_start":
 		if payload.ContentBlock == nil {
 			return false
 		}
 		block := payload.ContentBlock
-		return block.Text != "" || block.Data != "" || ((block.Type == "tool_use" || block.Type == "server_tool_use") && block.Name != "")
+		return strings.TrimSpace(block.Text) != "" || strings.TrimSpace(block.Data) != "" || ((block.Type == "tool_use" || block.Type == "server_tool_use") && strings.TrimSpace(block.Name) != "")
 	case "response.output_item.added":
 		var item struct {
 			Item struct {
@@ -157,7 +157,7 @@ func streamEventHasContent(data []byte, eventType string) bool {
 		return item.Item.Type != "" && item.Item.Type != "message" && item.Item.Type != "reasoning" && (item.Item.ID != "" || item.Item.Name != "")
 	}
 	for _, choice := range payload.Choices {
-		if (choice.FinishReason != nil && *choice.FinishReason != "") || choiceHasDeliveredContent(&model.Choice{Delta: &choice.Delta}) || choice.Delta.Refusal != "" {
+		if choiceHasDeliveredContent(&model.Choice{Delta: &choice.Delta}) || choice.Delta.Refusal != "" {
 			return true
 		}
 	}
@@ -166,8 +166,7 @@ func streamEventHasContent(data []byte, eventType string) bool {
 	}
 	var gemini struct {
 		Candidates []struct {
-			FinishReason string `json:"finishReason"`
-			Content      struct {
+			Content struct {
 				Parts []struct {
 					Text         string `json:"text"`
 					FunctionCall *struct {
@@ -184,11 +183,44 @@ func streamEventHasContent(data []byte, eventType string) bool {
 		return false
 	}
 	for _, candidate := range gemini.Candidates {
-		if candidate.FinishReason != "" {
-			return true
-		}
 		for _, part := range candidate.Content.Parts {
-			if part.Text != "" || (part.FunctionCall != nil && part.FunctionCall.Name != "") || (part.InlineData != nil && part.InlineData.Data != "") {
+			if strings.TrimSpace(part.Text) != "" || (part.FunctionCall != nil && strings.TrimSpace(part.FunctionCall.Name) != "") || (part.InlineData != nil && strings.TrimSpace(part.InlineData.Data) != "") {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+type streamOutputPayload struct {
+	Type     string                `json:"type"`
+	Text     string                `json:"text"`
+	Refusal  string                `json:"refusal"`
+	Name     string                `json:"name"`
+	Response *streamOutputPayload  `json:"response"`
+	Item     *streamOutputPayload  `json:"item"`
+	Part     *streamOutputPayload  `json:"part"`
+	Content  []streamOutputPayload `json:"content"`
+	Output   []streamOutputPayload `json:"output"`
+	Summary  []streamOutputPayload `json:"summary"`
+}
+
+func (payload *streamOutputPayload) hasContent() bool {
+	if payload == nil {
+		return false
+	}
+	if strings.TrimSpace(payload.Text) != "" || strings.TrimSpace(payload.Refusal) != "" {
+		return true
+	}
+	if (payload.Type == "function_call" || payload.Type == "custom_tool_call") && payload.Name != "" {
+		return true
+	}
+	if payload.Response.hasContent() || payload.Item.hasContent() || payload.Part.hasContent() {
+		return true
+	}
+	for _, items := range [][]streamOutputPayload{payload.Content, payload.Output, payload.Summary} {
+		for _, item := range items {
+			if item.hasContent() {
 				return true
 			}
 		}

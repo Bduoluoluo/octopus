@@ -345,6 +345,8 @@ func Handler(inboundType inbound.InboundType, c *gin.Context) {
 			}
 			return
 		}
+		log.Debugf("continuing to next channel after failed attempt (channel=%s status=%d remaining_candidates=%d)",
+			channel.Name, result.StatusCode, iter.Len()-iter.Index()-1)
 		lastErr = result.Err
 		lastResult = result
 	}
@@ -497,6 +499,12 @@ func (ra *relayAttempt) attempt() attemptResult {
 	} else if requestTimeout {
 		failMsg = "timeout=request: " + failMsg
 	}
+	if upstreamErr != nil {
+		remaining := ra.iter.Len() - ra.iter.Index() - 1
+		reason := upstreamFailoverReason(ra.streamPayloadWritten.Load(), ra.requestContext().Err() != nil, remaining)
+		failMsg += fmt.Sprintf(" [failover=%s remaining_candidates=%d]", reason, remaining)
+		log.Warnf("upstream failure (channel_id=%d status=%d failover=%s remaining_candidates=%d)", ra.channel.ID, statusCode, reason, remaining)
+	}
 
 	op.ChannelKeyUpdate(ra.usedKey)
 	span.End(dbmodel.AttemptFailed, statusCode, failMsg)
@@ -524,10 +532,23 @@ func (ra *relayAttempt) attempt() attemptResult {
 		Written:           written,
 		ResetConversation: statusCode == http.StatusConflict && needsConversationRestart(relayErrorMessage(fwdErr)),
 		FirstTokenTimeout: firstTokenTimeout,
-		Err:               fmt.Errorf("channel %s failed: %v", ra.channel.Name, fwdErr),
+		Err:               fmt.Errorf("channel %s failed: %s", ra.channel.Name, failMsg),
 		StatusCode:        statusCode,
 		RetryAfter:        ra.retryAfter,
 	}
+}
+
+func upstreamFailoverReason(written, canceled bool, remaining int) string {
+	if written {
+		return "blocked_response_started"
+	}
+	if canceled {
+		return "blocked_client_canceled"
+	}
+	if remaining <= 0 {
+		return "candidates_exhausted"
+	}
+	return "next_candidate_available"
 }
 
 // parseRequest 解析并验证入站请求
