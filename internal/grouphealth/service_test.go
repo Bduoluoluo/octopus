@@ -47,7 +47,7 @@ func TestRunGroupHealthAppliesCircuitBreakerOnFailure(t *testing.T) {
 
 	okServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"id":"resp_1","object":"response","status":"completed"}`))
+		_, _ = w.Write([]byte(`{"id":"resp_1","object":"response","status":"completed","output":[{"content":[{"type":"output_text","text":"hi"}]}]}`))
 	}))
 	defer okServer.Close()
 
@@ -111,7 +111,7 @@ func TestRunGroupHealthFailoverDoesNotMutateRuntimeStats(t *testing.T) {
 
 	secondServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"id":"resp_1","object":"response","status":"completed"}`))
+		_, _ = w.Write([]byte(`{"id":"resp_1","object":"response","status":"completed","output":[{"content":[{"type":"output_text","text":"hi"}]}]}`))
 	}))
 	defer secondServer.Close()
 
@@ -244,7 +244,7 @@ func TestRunGroupHealthFullProbeDoesNotSkipRemainingFailoverCandidates(t *testin
 
 	firstServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"id":"resp_first","object":"response","status":"completed"}`))
+		_, _ = w.Write([]byte(`{"id":"resp_first","object":"response","status":"completed","output":[{"content":[{"type":"output_text","text":"hi"}]}]}`))
 	}))
 	defer firstServer.Close()
 

@@ -137,6 +137,8 @@ Dockerfile 要求二进制文件位于 `build/docker/linux/<架构>/octopus`。�
 - 常用环境变量：`OCTOPUS_SERVER_HOST`、`OCTOPUS_SERVER_PORT`（默认 `8080`）、`OCTOPUS_DATABASE_TYPE`、`OCTOPUS_DATABASE_PATH`。
 - 设置中的“数据管理”可以配置日志保留时间和数据库大小上限。超过上限时，程序会删除最旧的一半中继日志。
 - 渠道编辑支持单个和批量模型测试，会发送真实上游请求，可能产生费用。
+- OpenAI Chat/Responses 渠道的模型测试和分组测活使用流式 `/v1/responses` 请求，发送 `hi` 和内置 Codex instructions，模型名取当前被测模型，默认单次超时 10 秒。上游需要支持 Responses 接口；其他协议渠道使用原协议。
+- 分组“检查”在故障转移模式下找到首个可用候选即停止；“完整探活”会继续测试其余候选。其他分组模式两者均逐项测试，均遵守渠道的“跳过健康检查”设置。
 
 ## 许可证
 

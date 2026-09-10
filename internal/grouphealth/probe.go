@@ -28,7 +28,7 @@ type Prober struct {
 
 func NewProber() *Prober {
 	return &Prober{
-		CandidateTimeout: 12 * time.Second,
+		CandidateTimeout: helper.DefaultModelTestTimeout,
 	}
 }
 
@@ -38,7 +38,7 @@ func (p *Prober) RunCandidate(ctx context.Context, channel model.Channel, usedKe
 
 	timeout := p.CandidateTimeout
 	if timeout <= 0 {
-		timeout = 12 * time.Second
+		timeout = helper.DefaultModelTestTimeout
 	}
 
 	probeCtx, cancel := context.WithTimeout(ctx, timeout)
@@ -81,6 +81,16 @@ func (p *Prober) RunCandidate(ctx context.Context, channel model.Channel, usedKe
 	result.Header = response.Header.Clone()
 	result.DurationMS = time.Since(startedAt).Milliseconds()
 
+	if helper.UsesResponsesProbe(channel.Type) {
+		if err := helper.ValidateResponsesProbe(response); err != nil {
+			result.ErrorMessage = err.Error()
+		} else {
+			result.Success = true
+		}
+		result.DurationMS = time.Since(startedAt).Milliseconds()
+		return result
+	}
+
 	if response.StatusCode >= 200 && response.StatusCode < 300 {
 		result.Success = true
 		return result
@@ -109,6 +119,9 @@ func buildProbeRequest(ctx context.Context, channel *model.Channel, usedKey *mod
 		return nil, fmt.Errorf("model name is empty")
 	}
 
+	if helper.UsesResponsesProbe(channel.Type) {
+		return helper.BuildResponsesProbeRequest(ctx, channel.GetBaseUrl(), usedKey.ChannelKey, modelName)
+	}
 	request := buildProbeInternalRequest(channel.Type, modelName)
 	adapter := outbound.Get(channel.Type)
 	if adapter == nil {
@@ -130,14 +143,6 @@ func buildProbeInternalRequest(channelType outbound.OutboundType, modelName stri
 			EmbeddingInput: &transformerModel.EmbeddingInput{
 				Single: &ping,
 			},
-		}
-	case outbound.OutboundTypeOpenAIResponse:
-		return &transformerModel.InternalLLMRequest{
-			Model:               modelName,
-			RawAPIFormat:        transformerModel.APIFormatOpenAIResponse,
-			Messages:            []transformerModel.Message{{Role: "user", Content: transformerModel.MessageContent{Content: &ping}}},
-			Stream:              &stream,
-			MaxCompletionTokens: &one,
 		}
 	case outbound.OutboundTypeAnthropic:
 		return &transformerModel.InternalLLMRequest{

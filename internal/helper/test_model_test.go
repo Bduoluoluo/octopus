@@ -22,7 +22,7 @@ func TestBuildTestRequestProtocols(t *testing.T) {
 		auth        string
 		bodyField   string
 	}{
-		{"chat", outbound.OutboundTypeOpenAIChat, "/v1/chat/completions", "Authorization", "Bearer test-key", "messages"},
+		{"chat", outbound.OutboundTypeOpenAIChat, "/v1/responses", "Authorization", "Bearer test-key", "input"},
 		{"responses", outbound.OutboundTypeOpenAIResponse, "/v1/responses", "Authorization", "Bearer test-key", "input"},
 		{"anthropic", outbound.OutboundTypeAnthropic, "/v1/messages", "X-Api-Key", "test-key", "messages"},
 		{"gemini", outbound.OutboundTypeGemini, "/v1beta/models/test-model:generateContent", "X-Goog-Api-Key", "test-key", "contents"},
