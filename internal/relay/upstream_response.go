@@ -105,7 +105,7 @@ func streamEventHasContent(data []byte, eventType string) bool {
 		ContentBlock *model.StreamContentBlock `json:"content_block"`
 	}
 	if json.Unmarshal(data, &payload) != nil {
-		return true
+		return false
 	}
 	if payload.Type == "" {
 		payload.Type = eventType
@@ -113,6 +113,8 @@ func streamEventHasContent(data []byte, eventType string) bool {
 	switch payload.Type {
 	case "ping", "message_start", "content_block_stop", "response.created", "response.in_progress", "response.queued", "response.content_part.added":
 		return false
+	case "message_stop", "response.completed", "response.done", "response.incomplete":
+		return true
 	case "message_delta":
 		var delta struct {
 			StopReason *string `json:"stop_reason"`
@@ -121,7 +123,9 @@ func streamEventHasContent(data []byte, eventType string) bool {
 			return false
 		}
 		return delta.StopReason != nil && strings.TrimSpace(*delta.StopReason) != ""
-	case "response.output_text.delta", "response.reasoning_text.delta", "response.reasoning_summary_text.delta", "response.refusal.delta":
+	case "response.output_text.delta", "response.reasoning_text.delta", "response.reasoning_summary_text.delta", "response.refusal.delta",
+		"response.function_call_arguments.delta", "response.custom_tool_call_input.delta", "response.output_audio.delta", "response.audio.delta",
+		"response.output_audio_transcript.delta", "response.audio_transcript.delta", "response.code_interpreter_call_code.delta":
 		var delta string
 		return json.Unmarshal(payload.Delta, &delta) == nil && delta != ""
 	case "content_block_delta":
@@ -132,34 +136,64 @@ func streamEventHasContent(data []byte, eventType string) bool {
 			Signature   string `json:"signature"`
 		}
 		if json.Unmarshal(payload.Delta, &delta) != nil {
-			return true
+			return false
 		}
 		return delta.Text != "" || delta.Thinking != "" || delta.PartialJSON != "" || delta.Signature != ""
 	case "content_block_start":
-		return payload.ContentBlock != nil && (payload.ContentBlock.Type != "text" && payload.ContentBlock.Type != "thinking" || payload.ContentBlock.Text != "")
+		if payload.ContentBlock == nil {
+			return false
+		}
+		block := payload.ContentBlock
+		return block.Text != "" || block.Data != "" || ((block.Type == "tool_use" || block.Type == "server_tool_use") && block.Name != "")
 	case "response.output_item.added":
 		var item struct {
 			Item struct {
 				Type string `json:"type"`
+				ID   string `json:"id"`
+				Name string `json:"name"`
 			} `json:"item"`
 		}
 		_ = json.Unmarshal(data, &item)
-		return item.Item.Type != "message" && item.Item.Type != "reasoning"
+		return item.Item.Type != "" && item.Item.Type != "message" && item.Item.Type != "reasoning" && (item.Item.ID != "" || item.Item.Name != "")
 	}
 	for _, choice := range payload.Choices {
-		if choice.FinishReason != nil || choiceHasDeliveredContent(&model.Choice{Delta: &choice.Delta}) || choice.Delta.Refusal != "" {
+		if (choice.FinishReason != nil && *choice.FinishReason != "") || choiceHasDeliveredContent(&model.Choice{Delta: &choice.Delta}) || choice.Delta.Refusal != "" {
 			return true
 		}
 	}
 	if len(payload.Choices) > 0 {
 		return false
 	}
-	if payload.Type != "" {
-		return true
+	var gemini struct {
+		Candidates []struct {
+			FinishReason string `json:"finishReason"`
+			Content      struct {
+				Parts []struct {
+					Text         string `json:"text"`
+					FunctionCall *struct {
+						Name string `json:"name"`
+					} `json:"functionCall"`
+					InlineData *struct {
+						Data string `json:"data"`
+					} `json:"inlineData"`
+				} `json:"parts"`
+			} `json:"content"`
+		} `json:"candidates"`
 	}
-	var fields map[string]json.RawMessage
-	_ = json.Unmarshal(data, &fields)
-	return len(fields["candidates"]) > 0
+	if json.Unmarshal(data, &gemini) != nil {
+		return false
+	}
+	for _, candidate := range gemini.Candidates {
+		if candidate.FinishReason != "" {
+			return true
+		}
+		for _, part := range candidate.Content.Parts {
+			if part.Text != "" || (part.FunctionCall != nil && part.FunctionCall.Name != "") || (part.InlineData != nil && part.InlineData.Data != "") {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func guardedStreamTransform(transform stream.StreamTransform, framed bool) stream.StreamTransform {

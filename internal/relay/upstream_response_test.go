@@ -128,13 +128,27 @@ func TestUpstreamStreamPreambleAndLegitimateContent(t *testing.T) {
 		{`{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":12}}`, true},
 		{`{"type":"message_delta","delta":{"stop_reason":"max_tokens"},"usage":{"output_tokens":12}}`, true},
 		{`{"type":"response.output_text.delta","delta":""}`, false},
+		{`{"type":"response.reasoning_summary_part.added","part":{"type":"summary_text","text":""}}`, false},
+		{`{"type":"response.output_text.done","text":""}`, false},
+		{`{"type":"response.output_item.added","item":{}}`, false},
+		{`{"type":"upstream.keepalive","usage":{"output_tokens":999}}`, false},
+		{`{"type":"content_block_start","content_block":{}}`, false},
+		{`{"candidates":[]}`, false},
+		{`{"candidates":[{"content":{"parts":[]}}]}`, false},
+		{`{"choices":[{"delta":{},"finish_reason":""}]}`, false},
 		{`{"type":"content_block_delta","delta":{"type":"text_delta","text":""}}`, false},
 		{`{"type":"content_block_start","content_block":{"type":"text","text":""}}`, false},
 		{`{"type":"content_block_start","content_block":{"type":"tool_use","id":"tool_1","name":"search","input":{}}}`, true},
 		{`{"choices":[{"delta":{"tool_calls":[{"id":"tool_1","type":"function","function":{"name":"search","arguments":"{}"}}]}}]}`, true},
 		{`{"choices":[{"delta":{"refusal":"cannot comply"}}]}`, true},
 		{`{"type":"response.output_text.delta","delta":"rate limit exceeded"}`, true},
+		{`{"type":"response.output_item.added","item":{"type":"function_call","id":"tool_1","name":"search"}}`, true},
+		{`{"type":"response.function_call_arguments.delta","delta":"{}"}`, true},
+		{`{"type":"response.output_audio.delta","delta":"encoded-audio"}`, true},
+		{`{"type":"response.reasoning_summary_text.delta","delta":"Thinking"}`, true},
+		{`{"type":"response.completed","response":{"status":"completed"}}`, true},
 		{`{"candidates":[{"content":{"parts":[{"text":"hello"}]}}]}`, true},
+		{`{"candidates":[{"content":{"parts":[{"functionCall":{"name":"search","args":{}}}]}}]}`, true},
 	} {
 		if got := streamEventHasContent([]byte(test.body), ""); got != test.content {
 			t.Errorf("content=%t expected %t: %s", got, test.content, test.body)
@@ -142,11 +156,42 @@ func TestUpstreamStreamPreambleAndLegitimateContent(t *testing.T) {
 	}
 }
 
+func TestResponsesPreambleErrorRemainsUnwritten(t *testing.T) {
+	for _, framed := range []bool{false, true} {
+		t.Run(fmt.Sprint(framed), func(t *testing.T) {
+			guard := guardedStreamTransform(nil, framed)
+			encode := func(payload string) []byte {
+				if framed {
+					return []byte("data: " + payload + "\n\n")
+				}
+				return []byte(payload)
+			}
+			for _, payload := range []string{
+				`{"type":"response.created","response":{"id":"bad","output":[]}}`,
+				`{"type":"response.output_item.added","item":{"type":"reasoning","id":"reasoning_1"}}`,
+				`{"type":"response.reasoning_summary_part.added","part":{"type":"summary_text","text":""}}`,
+				`{"type":"response.reasoning_summary_text.done","text":""}`,
+				`{"type":"response.custom_keepalive"}`,
+			} {
+				output, err := guard(context.Background(), encode(payload))
+				if err != nil || len(output) != 0 {
+					t.Fatalf("metadata committed the response: output=%q err=%v", output, err)
+				}
+			}
+			output, err := guard(context.Background(), encode(`{"type":"response.failed","response":{"status":"failed","error":{"code":"upstream_error","message":"Upstream request failed"}}}`))
+			var upstreamErr *model.ResponseError
+			if len(output) != 0 || !errors.As(err, &upstreamErr) || upstreamErr.StatusCode != 502 {
+				t.Fatalf("expected unwritten retryable error, got output=%q err=%v", output, err)
+			}
+		})
+	}
+}
+
 func TestUpstreamErrorFailoverAndAccounting(t *testing.T) {
-	for _, mode := range []struct{ streaming, partial, usageOnly, convert bool }{{false, false, false, false}, {true, false, false, false}, {true, true, false, false}, {true, false, true, false}, {true, false, true, true}} {
+	for _, mode := range []struct{ streaming, partial, usageOnly, convert, metadataOnly bool }{{false, false, false, false, false}, {true, false, false, false, false}, {true, true, false, false, false}, {true, false, true, false, false}, {true, false, true, true, false}, {true, false, true, false, true}, {true, false, true, true, true}} {
 		streaming, partial := mode.streaming, mode.partial
 		for _, fallback := range []bool{false, true} {
-			t.Run(fmt.Sprintf("stream=%t/partial=%t/usage=%t/convert=%t/fallback=%t", streaming, partial, mode.usageOnly, mode.convert, fallback), func(t *testing.T) {
+			t.Run(fmt.Sprintf("stream=%t/partial=%t/usage=%t/convert=%t/metadata=%t/fallback=%t", streaming, partial, mode.usageOnly, mode.convert, mode.metadataOnly, fallback), func(t *testing.T) {
 				ctx := setupRelayTestDB(t)
 				if err := op.LLMCreate(dbmodel.LLMInfo{Name: "test-model", LLMPrice: dbmodel.LLMPrice{Input: 1000000, Output: 2000000}}, ctx); err != nil {
 					t.Fatal(err)
@@ -160,6 +205,10 @@ func TestUpstreamErrorFailoverAndAccounting(t *testing.T) {
 						_, _ = io.WriteString(writer, "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"bad\",\"role\":\"assistant\",\"content\":[],\"usage\":{\"input_tokens\":999}}}\n\n")
 						writer.(http.Flusher).Flush()
 						if mode.usageOnly {
+							if mode.metadataOnly {
+								_, _ = io.WriteString(writer, "event: upstream.keepalive\ndata: {\"type\":\"upstream.keepalive\"}\n\n")
+								writer.(http.Flusher).Flush()
+							}
 							_, _ = io.WriteString(writer, "event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":null},\"usage\":{\"output_tokens\":999}}\n\n")
 							writer.(http.Flusher).Flush()
 							_, _ = io.WriteString(writer, "event: error\ndata: {\"type\":\"error\",\"error\":{\"code\":\"upstream_error\",\"message\":\"Upstream request failed\"}}\n\n")
