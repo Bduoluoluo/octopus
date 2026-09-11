@@ -20,6 +20,7 @@ interface ModelTestState {
     delay_ms?: number;
     status_code?: number;
     error?: string;
+    output?: string;
 }
 
 interface TestPanelProps {
@@ -123,7 +124,7 @@ export function TestPanel({ channel, formData }: TestPanelProps) {
         else if (r.status_code >= 500) status = 'server_error';
         else if (r.status_code >= 400) status = 'client_error';
         else status = 'client_error';
-        return { status, delay_ms: r.delay_ms, status_code: r.status_code, error: r.error };
+        return { status, delay_ms: r.delay_ms, status_code: r.status_code, error: r.error, output: r.output };
     };
 
     const notifyFailure = (model: string, state: ModelTestState) => {
@@ -140,7 +141,9 @@ export function TestPanel({ channel, formData }: TestPanelProps) {
             const r = await testModel.mutateAsync(req as Parameters<typeof testModel.mutateAsync>[0]);
             const next = toState(r);
             updateResult(model, next);
-            if (next.status !== 'ok') {
+            if (next.status === 'ok') {
+                toast.success(next.output || t('successNoOutput'), { description: model });
+            } else {
                 notifyFailure(model, next);
             }
         } catch (e) {
@@ -209,7 +212,7 @@ export function TestPanel({ channel, formData }: TestPanelProps) {
                 ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400'
                 : 'bg-red-500/15 text-red-700 dark:text-red-400';
         return (
-            <Badge variant="secondary" className={cn('h-5 px-1.5 text-[10px] font-mono', cls)} title={state.error}>
+            <Badge variant="secondary" className={cn('h-5 px-1.5 text-[10px] font-mono', cls)} title={state.error || state.output}>
                 {state.status_code}
             </Badge>
         );
@@ -294,7 +297,7 @@ export function TestPanel({ channel, formData }: TestPanelProps) {
                                 />
                                 <span
                                     className="flex-1 min-w-0 truncate text-xs font-mono text-card-foreground"
-                                    title={state?.error || m}
+                                    title={state?.error || state?.output || m}
                                 >
                                     {m}
                                 </span>

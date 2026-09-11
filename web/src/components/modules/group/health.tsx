@@ -104,12 +104,14 @@ function attemptBadgeTone(status: GroupHealthAttemptStatus) {
 
 export function GroupHealthAttemptDetails({ attempt }: { attempt: GroupHealthAttempt }) {
     const t = useTranslations('group.health');
-    const hasError = Boolean(attempt.error_message);
+    const isSuccess = attempt.status === 'success';
+    const detail = isSuccess ? attempt.output : attempt.error_message;
+    const hasDetails = Boolean(detail);
 
     const content = (
         <div className="grid grid-cols-[1rem_minmax(0,1fr)_auto] items-start gap-x-2 text-xs">
             <div className="flex h-5 items-center justify-center text-muted-foreground">
-                {hasError ? <ChevronDown className="size-3.5 transition-transform group-open:rotate-180" /> : null}
+                {hasDetails ? <ChevronDown className="size-3.5 transition-transform group-open:rotate-180" /> : null}
             </div>
             <div className="min-w-0">
                 <div className="truncate font-medium leading-5">
@@ -129,7 +131,7 @@ export function GroupHealthAttemptDetails({ attempt }: { attempt: GroupHealthAtt
         </div>
     );
 
-    if (!hasError) {
+    if (!hasDetails) {
         return (
             <Card className="gap-0 rounded-2xl border-border/60 bg-card/80 py-0 shadow-xs transition-[border-color,box-shadow] hover:border-border hover:shadow-sm">
                 <CardContent className="px-3 py-2 text-xs">
@@ -146,8 +148,8 @@ export function GroupHealthAttemptDetails({ attempt }: { attempt: GroupHealthAtt
                     {content}
                 </summary>
                 <div className="mx-3 mb-2 ml-9 max-h-36 overflow-y-auto whitespace-pre-wrap break-all border-t border-border/60 pt-2 text-xs leading-relaxed text-muted-foreground">
-                    <div className="mb-1 font-medium text-foreground">{t('errorDetails')}</div>
-                    {attempt.error_message}
+                    <div className="mb-1 font-medium text-foreground">{t(isSuccess ? 'responseDetails' : 'errorDetails')}</div>
+                    {detail}
                 </div>
             </details>
         </Card>

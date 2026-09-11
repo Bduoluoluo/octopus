@@ -19,6 +19,7 @@ type ProbeResult struct {
 	HTTPStatus   int
 	DurationMS   int64
 	ErrorMessage string
+	Output       string
 	Header       http.Header // 上游响应头，供 POR 门3 做 Cloudflare 指纹识别
 }
 
@@ -82,16 +83,25 @@ func (p *Prober) RunCandidate(ctx context.Context, channel model.Channel, usedKe
 	result.DurationMS = time.Since(startedAt).Milliseconds()
 
 	if helper.UsesResponsesProbe(channel.Type) {
-		if err := helper.ValidateResponsesProbe(response); err != nil {
+		output, err := helper.ReadResponsesProbe(response)
+		if err != nil {
 			result.ErrorMessage = err.Error()
 		} else {
 			result.Success = true
+			result.Output = output
 		}
 		result.DurationMS = time.Since(startedAt).Milliseconds()
 		return result
 	}
 
 	if response.StatusCode >= 200 && response.StatusCode < 300 {
+		body, err := io.ReadAll(io.LimitReader(response.Body, 32*1024))
+		result.DurationMS = time.Since(startedAt).Milliseconds()
+		if err != nil {
+			result.ErrorMessage = fmt.Sprintf("read body: %v", err)
+			return result
+		}
+		result.Output = helper.ExtractProbeOutput(body)
 		result.Success = true
 		return result
 	}

@@ -57,6 +57,7 @@ type GroupHealthAttempt struct {
 	HTTPStatus   int                      `json:"http_status" gorm:"not null;default:0"`
 	DurationMS   int64                    `json:"duration_ms" gorm:"not null;default:0"`
 	ErrorMessage string                   `json:"error_message"`
+	Output       string                   `json:"output" gorm:"type:text"`
 }
 
 type GroupHealthGroupView struct {

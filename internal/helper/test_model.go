@@ -37,6 +37,7 @@ type TestModelResult struct {
 	StatusCode int    `json:"status_code"`
 	DelayMS    int64  `json:"delay_ms"`
 	Error      string `json:"error,omitempty"`
+	Output     string `json:"output,omitempty"`
 }
 
 // TestChannelModel 直接测试指定模型，不经过转发、重试和计费流程。
@@ -102,8 +103,11 @@ func TestChannelModel(
 	defer resp.Body.Close()
 	result.StatusCode = resp.StatusCode
 	if UsesResponsesProbe(channel.Type) {
-		if err := ValidateResponsesProbe(resp); err != nil {
+		output, err := ReadResponsesProbe(resp)
+		if err != nil {
 			result.Error = truncateErr(err.Error(), 200)
+		} else {
+			result.Output = output
 		}
 		result.DelayMS = time.Since(start).Milliseconds()
 		return result, nil
@@ -117,6 +121,8 @@ func TestChannelModel(
 
 	if resp.StatusCode >= 400 {
 		result.Error = summarizeUpstreamError(resp.StatusCode, bodyBytes)
+	} else if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		result.Output = ExtractProbeOutput(bodyBytes)
 	}
 	return result, nil
 }

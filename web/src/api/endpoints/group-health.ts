@@ -23,6 +23,7 @@ export interface GroupHealthAttempt {
     http_status: number;
     duration_ms: number;
     error_message: string;
+    output: string;
 }
 
 export interface GroupHealthSnapshot {
@@ -81,6 +82,7 @@ function normalizeAttempt(attempt: Partial<GroupHealthAttempt>): GroupHealthAtte
         http_status: typeof attempt.http_status === 'number' ? attempt.http_status : 0,
         duration_ms: typeof attempt.duration_ms === 'number' ? attempt.duration_ms : 0,
         error_message: attempt.error_message ?? '',
+        output: attempt.output ?? '',
     };
 }
 

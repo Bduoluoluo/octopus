@@ -361,6 +361,7 @@ export type TestModelResult = {
     status_code: number;
     delay_ms: number;
     error?: string;
+    output?: string;
 };
 
 export function useTestChannelModel() {

@@ -635,6 +635,7 @@
       },
       "empty": "暫無健康快照。",
       "errorDetails": "錯誤詳情",
+      "responseDetails": "回傳內容",
       "noHttpStatus": "無 HTTP 狀態"
     },
     "empty": "暫無分組，點擊左上角按鈕建立",
@@ -837,6 +838,7 @@
       "testButtonTitle": "測試此模型",
       "statusUntested": "未測試",
       "statusNetwork": "網路錯誤",
+      "successNoOutput": "測試成功，未回傳內容",
       "noKeys": "無可用金鑰",
       "noModels": "請先新增或取得模型"
     },

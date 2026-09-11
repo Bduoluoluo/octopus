@@ -80,13 +80,18 @@ func TestValidateResponsesProbe(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			response := &http.Response{StatusCode: test.status, Header: http.Header{"Content-Type": {test.contentType}}, Body: io.NopCloser(strings.NewReader(test.body))}
 			defer response.Body.Close()
-			err := ValidateResponsesProbe(response)
+			output, err := ReadResponsesProbe(response)
 			if test.wantError == "" {
 				if err != nil {
 					t.Fatal(err)
 				}
+				if output != "Hello" {
+					t.Fatalf("expected response text, got %q", output)
+				}
 			} else if err == nil || !strings.Contains(err.Error(), test.wantError) {
 				t.Fatalf("expected %q, got %v", test.wantError, err)
+			} else if output != "" {
+				t.Fatalf("failed probe returned success output: %q", output)
 			}
 		})
 	}
@@ -130,6 +135,12 @@ func TestChannelResponsesProbeStream(t *testing.T) {
 			}
 			if (mode == "success" || mode == "done_keepalive") && result.Error != "" {
 				t.Fatal(result.Error)
+			}
+			if (mode == "success" || mode == "done_keepalive") && result.Output != "hi" {
+				t.Fatalf("missing response output: %+v", result)
+			}
+			if result.Error != "" && result.Output != "" {
+				t.Fatalf("failed probe returned success output: %+v", result)
 			}
 			if mode == "error" && !strings.Contains(result.Error, "Bad Gateway") {
 				t.Fatalf("missing stream error: %+v", result)

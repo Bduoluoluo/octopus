@@ -180,6 +180,12 @@ func TestRunGroupHealthFailoverDoesNotMutateRuntimeStats(t *testing.T) {
 	if view.Latest.Attempts[1].Status != model.GroupHealthAttemptStatusSuccess {
 		t.Fatalf("expected second attempt success, got %s", view.Latest.Attempts[1].Status)
 	}
+	if view.Latest.Attempts[1].Output != "hi" || view.Latest.Attempts[1].ErrorMessage != "" {
+		t.Fatalf("success output was not persisted correctly: %+v", view.Latest.Attempts[1])
+	}
+	if view.Latest.Attempts[0].Output != "" || view.Latest.Attempts[0].ErrorMessage == "" {
+		t.Fatalf("failure details changed: %+v", view.Latest.Attempts[0])
+	}
 	if view.Latest.SuccessfulChannelID == nil || *view.Latest.SuccessfulChannelID != secondChannel.ID {
 		t.Fatalf("expected successful channel %d, got %#v", secondChannel.ID, view.Latest.SuccessfulChannelID)
 	}

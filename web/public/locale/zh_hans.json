@@ -635,6 +635,7 @@
       },
       "empty": "暂无健康快照。",
       "errorDetails": "错误详情",
+      "responseDetails": "返回内容",
       "noHttpStatus": "无 HTTP 状态"
     },
     "empty": "暂无分组，点击左上角按钮创建",
@@ -837,6 +838,7 @@
       "testButtonTitle": "测试此模型",
       "statusUntested": "未测试",
       "statusNetwork": "网络错误",
+      "successNoOutput": "测试成功，未返回内容",
       "noKeys": "无可用密钥",
       "noModels": "请先添加或获取模型"
     },

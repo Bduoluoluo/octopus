@@ -69,6 +69,12 @@ func TestRunCandidateResponsesStream(t *testing.T) {
 			if result.HTTPStatus != 200 || result.Success != (mode == "success") {
 				t.Fatalf("unexpected result: %+v", result)
 			}
+			if mode == "success" && result.Output != "hi" {
+				t.Fatalf("missing response output: %+v", result)
+			}
+			if !result.Success && result.Output != "" {
+				t.Fatalf("failed probe returned success output: %+v", result)
+			}
 			if mode == "error" && !strings.Contains(result.ErrorMessage, "Bad Gateway") {
 				t.Fatalf("missing error: %+v", result)
 			}

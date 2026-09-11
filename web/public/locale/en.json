@@ -635,6 +635,7 @@
       },
       "empty": "No health snapshot yet.",
       "errorDetails": "Error details",
+      "responseDetails": "Response content",
       "noHttpStatus": "No HTTP status"
     },
     "empty": "No groups yet, click the button above to create one",
@@ -837,6 +838,7 @@
       "testButtonTitle": "Test this model",
       "statusUntested": "Not tested",
       "statusNetwork": "Network error",
+      "successNoOutput": "Test succeeded; no response content",
       "noKeys": "No available keys",
       "noModels": "Add or fetch models first"
     },

@@ -193,6 +193,7 @@ func (s *Service) RunGroupHealth(ctx context.Context, groupID int, probeModes ..
 			HTTPStatus:   result.HTTPStatus,
 			DurationMS:   result.DurationMS,
 			ErrorMessage: result.ErrorMessage,
+			Output:       result.Output,
 		}
 		if result.Success {
 			attempt.Status = model.GroupHealthAttemptStatusSuccess

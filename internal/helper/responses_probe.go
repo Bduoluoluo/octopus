@@ -89,37 +89,59 @@ func (payload *responsesProbePayload) hasOutput() bool {
 	return false
 }
 
+func (payload *responsesProbePayload) outputText() string {
+	if payload.Response != nil {
+		return payload.Response.outputText()
+	}
+	var output probeOutput
+	for _, item := range payload.Output {
+		for _, content := range item.Content {
+			output.append(content.Text)
+			output.append(content.Refusal)
+		}
+	}
+	return output.String()
+}
+
 func ValidateResponsesProbe(response *http.Response) error {
+	_, err := ReadResponsesProbe(response)
+	return err
+}
+
+func ReadResponsesProbe(response *http.Response) (string, error) {
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		body, err := io.ReadAll(io.LimitReader(response.Body, 32*1024))
 		if err != nil {
-			return fmt.Errorf("read upstream error: %w", err)
+			return "", fmt.Errorf("read upstream error: %w", err)
 		}
-		return fmt.Errorf("%s", summarizeUpstreamError(response.StatusCode, body))
+		return "", fmt.Errorf("%s", summarizeUpstreamError(response.StatusCode, body))
 	}
 	if !strings.Contains(strings.ToLower(response.Header.Get("Content-Type")), "text/event-stream") {
 		var payload responsesProbePayload
 		if err := json.NewDecoder(io.LimitReader(response.Body, 1024*1024)).Decode(&payload); err != nil {
-			return fmt.Errorf("invalid Responses body: %w", err)
+			return "", fmt.Errorf("invalid Responses body: %w", err)
 		}
 		if err := payload.failure(); err != nil {
-			return err
+			return "", err
 		}
+		output := payload.outputText()
 		if payload.Status != "completed" || !payload.hasOutput() {
-			return fmt.Errorf("upstream did not return a completed response with output")
+			return "", fmt.Errorf("upstream did not return a completed response with output")
 		}
-		return nil
+		return output, nil
 	}
 	hasOutput := false
+	var output probeOutput
+	snapshotOutput := ""
 	for event, err := range sse.Read(response.Body, &sse.ReadConfig{MaxEventSize: 1024 * 1024}) {
 		if err != nil {
 			if errors.Is(err, context.DeadlineExceeded) {
 				if hasOutput {
-					return fmt.Errorf("Responses test timed out after receiving output, while waiting for response.completed or response.done: %w", err)
+					return "", fmt.Errorf("Responses test timed out after receiving output, while waiting for response.completed or response.done: %w", err)
 				}
-				return fmt.Errorf("Responses test timed out before receiving output: %w", err)
+				return "", fmt.Errorf("Responses test timed out before receiving output: %w", err)
 			}
-			return fmt.Errorf("read Responses stream: %w", err)
+			return "", fmt.Errorf("read Responses stream: %w", err)
 		}
 		if strings.TrimSpace(event.Data) == "[DONE]" {
 			break
@@ -129,24 +151,34 @@ func ValidateResponsesProbe(response *http.Response) error {
 		}
 		var payload responsesProbePayload
 		if err := json.Unmarshal([]byte(event.Data), &payload); err != nil {
-			return fmt.Errorf("invalid Responses event: %w", err)
+			return "", fmt.Errorf("invalid Responses event: %w", err)
 		}
 		if payload.Type == "" {
 			payload.Type = event.Type
 		}
 		if err := payload.failure(); err != nil {
-			return err
+			return "", err
 		}
-		if (payload.Type == "response.output_text.delta" || payload.Type == "response.refusal.delta") && strings.TrimSpace(payload.Delta) != "" {
+		if payload.Type == "response.output_text.delta" || payload.Type == "response.refusal.delta" {
+			output.append(payload.Delta)
+			hasOutput = hasOutput || strings.TrimSpace(payload.Delta) != ""
+		}
+		if payload.hasOutput() {
 			hasOutput = true
+			snapshotOutput = payload.outputText()
 		}
-		hasOutput = hasOutput || payload.hasOutput()
 		if payload.Type == "response.completed" || payload.Type == "response.done" {
-			if !hasOutput {
-				return fmt.Errorf("upstream completed without output")
+			if payload.hasOutput() {
+				return snapshotOutput, nil
 			}
-			return nil
+			if !hasOutput {
+				return "", fmt.Errorf("upstream completed without output")
+			}
+			if output.text.Len() == 0 {
+				return snapshotOutput, nil
+			}
+			return output.String(), nil
 		}
 	}
-	return fmt.Errorf("upstream stream ended before response.completed or response.done")
+	return "", fmt.Errorf("upstream stream ended before response.completed or response.done")
 }
