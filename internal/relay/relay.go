@@ -121,6 +121,7 @@ func Handler(inboundType inbound.InboundType, c *gin.Context) {
 
 	var lastErr error
 	var lastResult attemptResult
+	retryChannels := make(map[int]bool)
 
 	// 同通道重试次数：启用时使用配置值，否则 1 次（不重试）
 	maxSameChannelRetries := 1
@@ -131,119 +132,103 @@ func Handler(inboundType inbound.InboundType, c *gin.Context) {
 		}
 	}
 
-	for iter.Next() {
-		select {
-		case <-c.Request.Context().Done():
-			// Client may cancel after a previous attempt already delivered a full
-			// answer (or while we were about to failover). Prefer success when
-			// metrics already show a completed stream (#111/#116).
-			if metricsSuggestCompletedStream(metrics) {
-				log.Debugf("request context canceled but stream already complete, treating as success")
-				metrics.SaveWithChannelStats(c.Request.Context(), true, nil, iter.Attempts(), false)
-			} else {
-				log.Infof("client canceled request before completion, stopping retry")
-				metrics.SaveWithChannelStats(c.Request.Context(), false, fmt.Errorf("client canceled request"), iter.Attempts(), false)
+	for round := 0; round < maxSameChannelRetries; round++ {
+		if round > 0 {
+			iter.Reset()
+		}
+		for iter.Next() {
+			select {
+			case <-c.Request.Context().Done():
+				// Client may cancel after a previous attempt already delivered a full
+				// answer (or while we were about to failover). Prefer success when
+				// metrics already show a completed stream (#111/#116).
+				if metricsSuggestCompletedStream(metrics) {
+					log.Debugf("request context canceled but stream already complete, treating as success")
+					metrics.SaveWithChannelStats(c.Request.Context(), true, nil, iter.Attempts(), false)
+				} else {
+					log.Infof("client canceled request before completion, stopping retry")
+					metrics.SaveWithChannelStats(c.Request.Context(), false, fmt.Errorf("client canceled request"), iter.Attempts(), false)
+				}
+				return
+			default:
 			}
-			return
-		default:
-		}
 
-		item := iter.Item()
-
-		// 获取通道
-		channel, err := op.ChannelGet(item.ChannelID, c.Request.Context())
-		if err != nil {
-			log.Warnf("failed to get channel %d: %v", item.ChannelID, err)
-			iter.Skip(item.ChannelID, 0, fmt.Sprintf("channel_%d", item.ChannelID), fmt.Sprintf("channel not found: %v", err))
-			lastErr = err
-			continue
-		}
-		if !channel.Enabled {
-			iter.Skip(channel.ID, 0, channel.Name, "channel disabled")
-			continue
-		}
-		if responsesPassthroughRequired {
-			if channel.Type == outbound.OutboundTypeOpenAIResponse {
-				responsesPassthroughCapableFound = true
-			} else {
-				iter.Skip(channel.ID, 0, channel.Name, "openai responses passthrough required")
+			item := iter.Item()
+			if round > 0 && !retryChannels[item.ChannelID] {
+				iter.Skip(item.ChannelID, 0, fmt.Sprintf("channel_%d", item.ChannelID), "not eligible for retry")
 				continue
 			}
-		}
 
-		// 出站适配器
-		outAdapter := outbound.Get(channel.Type)
-		if outAdapter == nil {
-			iter.Skip(channel.ID, 0, channel.Name, fmt.Sprintf("unsupported channel type: %d", channel.Type))
-			continue
-		}
-
-		// 类型兼容性检查
-		if internalRequest.IsEmbeddingRequest() && !outbound.IsEmbeddingChannelType(channel.Type) {
-			iter.Skip(channel.ID, 0, channel.Name, "channel type not compatible with embedding request")
-			continue
-		}
-		if internalRequest.IsChatRequest() && !outbound.IsChatChannelType(channel.Type) {
-			iter.Skip(channel.ID, 0, channel.Name, "channel type not compatible with chat request")
-			continue
-		}
-
-		// 设置实际模型
-		internalRequest.Model = item.ModelName
-
-		log.Debugf("request model %s, mode: %d, forwarding to channel: %s model: %s (attempt %d/%d, sticky=%t)",
-			requestModel, group.Mode, channel.Name, item.ModelName,
-			iter.Index()+1, iter.Len(), iter.IsSticky())
-
-		selectOpts := dbmodel.ChannelKeySelectOptions{
-			ExcludeKeyIDs:  make(map[int]struct{}),
-			PreferredKeyID: iter.StickyKeyID(),
-		}
-		var usedKey dbmodel.ChannelKey
-		for {
-			usedKey = channel.GetChannelKey(selectOpts)
-			if usedKey.ChannelKey == "" {
-				break
+			// 获取通道
+			channel, err := op.ChannelGet(item.ChannelID, c.Request.Context())
+			if err != nil {
+				log.Warnf("failed to get channel %d: %v", item.ChannelID, err)
+				iter.Skip(item.ChannelID, 0, fmt.Sprintf("channel_%d", item.ChannelID), fmt.Sprintf("channel not found: %v", err))
+				lastErr = err
+				continue
 			}
-			if !iter.SkipCircuitBreak(channel.ID, usedKey.ID, channel.Name) {
-				break
+			if !channel.Enabled {
+				iter.Skip(channel.ID, 0, channel.Name, "channel disabled")
+				continue
 			}
-			selectOpts.ExcludeKeyIDs[usedKey.ID] = struct{}{}
-			usedKey = dbmodel.ChannelKey{}
-		}
-		if usedKey.ChannelKey == "" {
-			if len(selectOpts.ExcludeKeyIDs) == 0 {
-				iter.Skip(channel.ID, 0, channel.Name, "no available key")
-			}
-			continue
-		}
-
-		// 同通道重试循环
-		var result attemptResult
-		for retryNum := 0; retryNum < maxSameChannelRetries; retryNum++ {
-			// 重试前等待退避
-			if retryNum > 0 {
-				delay := computeBackoff(retryNum, result.RetryAfter)
-				log.Infof("same-channel retry %d/%d for %s, waiting %v",
-					retryNum, maxSameChannelRetries, channel.Name, delay)
-				select {
-				case <-c.Request.Context().Done():
-					if metricsSuggestCompletedStream(metrics) {
-						log.Debugf("request context canceled during retry backoff but stream complete, treating as success")
-						metrics.SaveWithChannelStats(c.Request.Context(), true, nil, iter.Attempts(), false)
-					} else {
-						log.Infof("client canceled request during retry backoff")
-						metrics.SaveWithChannelStats(c.Request.Context(), false, fmt.Errorf("client canceled request"), iter.Attempts(), false)
-					}
-					return
-				case <-time.After(delay):
+			if responsesPassthroughRequired {
+				if channel.Type == outbound.OutboundTypeOpenAIResponse {
+					responsesPassthroughCapableFound = true
+				} else {
+					iter.Skip(channel.ID, 0, channel.Name, "openai responses passthrough required")
+					continue
 				}
-
-				// 重建 outAdapter 以重置流式状态（toolIndex, toolCalls 等）
-				outAdapter = outbound.Get(channel.Type)
 			}
 
-			// 构造尝试级上下文
+			// 出站适配器
+			outAdapter := outbound.Get(channel.Type)
+			if outAdapter == nil {
+				iter.Skip(channel.ID, 0, channel.Name, fmt.Sprintf("unsupported channel type: %d", channel.Type))
+				continue
+			}
+
+			// 类型兼容性检查
+			if internalRequest.IsEmbeddingRequest() && !outbound.IsEmbeddingChannelType(channel.Type) {
+				iter.Skip(channel.ID, 0, channel.Name, "channel type not compatible with embedding request")
+				continue
+			}
+			if internalRequest.IsChatRequest() && !outbound.IsChatChannelType(channel.Type) {
+				iter.Skip(channel.ID, 0, channel.Name, "channel type not compatible with chat request")
+				continue
+			}
+
+			// 设置实际模型
+			internalRequest.Model = item.ModelName
+
+			log.Debugf("request model %s, mode: %d, forwarding to channel: %s model: %s (attempt %d/%d, sticky=%t)",
+				requestModel, group.Mode, channel.Name, item.ModelName,
+				iter.Index()+1, iter.Len(), iter.IsSticky())
+
+			selectOpts := dbmodel.ChannelKeySelectOptions{
+				ExcludeKeyIDs:  make(map[int]struct{}),
+				PreferredKeyID: iter.StickyKeyID(),
+			}
+			var usedKey dbmodel.ChannelKey
+			for {
+				usedKey = channel.GetChannelKey(selectOpts)
+				if usedKey.ChannelKey == "" {
+					break
+				}
+				if !iter.SkipCircuitBreak(channel.ID, usedKey.ID, channel.Name) {
+					break
+				}
+				selectOpts.ExcludeKeyIDs[usedKey.ID] = struct{}{}
+				usedKey = dbmodel.ChannelKey{}
+			}
+			if usedKey.ChannelKey == "" {
+				if len(selectOpts.ExcludeKeyIDs) == 0 {
+					iter.Skip(channel.ID, 0, channel.Name, "no available key")
+				}
+				continue
+			}
+
+			var result attemptResult
+			// 每轮每个渠道只尝试一次；下一轮按原候选顺序继续。
 			ra := &relayAttempt{
 				relayRequest:         req,
 				outAdapter:           outAdapter,
@@ -251,104 +236,105 @@ func Handler(inboundType inbound.InboundType, c *gin.Context) {
 				usedKey:              usedKey,
 				firstTokenTimeOutSec: group.FirstTokenTimeOut,
 			}
-
 			result = ra.attempt()
-			if result.Success || result.Written || result.Canceled || result.ResetConversation || result.FirstTokenTimeout || !isRetryableStatus(result.StatusCode) {
-				break
+			if result.Success || result.Written || result.Canceled || result.ResetConversation || !isRetryableStatus(result.StatusCode) {
+				retryChannels[channel.ID] = false
+			} else {
+				retryChannels[channel.ID] = true
 			}
-		}
 
-		// 同通道重试耗尽后记录熔断器失败
-		if !result.Success && !result.Written && !result.Canceled && !result.ResetConversation {
-			failureKind := circuitFailureKind(group.RetryEnabled, result.StatusCode)
-			balancer.RecordFailure(channel.ID, usedKey.ID, internalRequest.Model, failureKind)
-			outlierwindow.Report(channel.ID, false, result.StatusCode, time.Now())
-			if failureKind == balancer.FailureHard {
-				maybeLearnManagedRoute(c.Request.Context(), channel.ID, internalRequest.Model, inboundType, result.Err)
-			}
-		}
-
-		if result.Success {
-			outlierwindow.Report(channel.ID, true, result.StatusCode, time.Now())
-
-			// === HTTP Replay 状态保存 ===
-			// 成功后，如果是 OpenAI Responses HTTP 请求，保存 replay 状态供后续续接
-			// 注意：exact replay 请求成功后也需要保存新状态，否则只能续接一轮
-			// 优先使用 metrics.InternalResponse（streaming 安全），避免二次 GetInternalResponse 消耗聚合器
-			if inboundType == inbound.InboundTypeOpenAIResponse &&
-				req.internalRequest.RawAPIFormat == model.APIFormatOpenAIResponse {
-				internalResponse := metrics.InternalResponse
-				if internalResponse == nil {
-					var err error
-					internalResponse, err = inAdapter.GetInternalResponse(c.Request.Context())
-					if err != nil {
-						log.Debugf("failed to get internal response for replay state save: %v", err)
-					}
-				}
-				if internalResponse != nil {
-					// 如果是 exact replay 请求，基于已有状态继续累积
-					var newState *wsConversationState
-					if req.internalRequest.IsOpenAIExactReplayRequest() && responsesReplayState != nil {
-						newState = cloneWSConversationState(responsesReplayState)
-						if newState != nil {
-							newState.ChannelID = channel.ID
-							newState.ChannelKeyID = usedKey.ID
-						}
-					}
-					if newState == nil {
-						newState = &wsConversationState{
-							RequestModel: requestModel,
-							ChannelID:    channel.ID,
-							ChannelKeyID: usedKey.ID,
-						}
-					}
-					newState.ApplySuccessfulTurn(req.internalRequest, internalResponse)
-					if newState.LastResponseID != "" {
-						ttl := wsConversationStateTTL(group.SessionKeepTime)
-						storeResponsesReplayState(apiKeyID, group.ID, requestModel, newState, ttl)
-						log.Debugf("saved HTTP replay state (apikey=%d, group=%d, model=%s, response_id=%s, channel=%d, key=%d, ttl=%v, is_replay=%t)",
-							apiKeyID, group.ID, requestModel, newState.LastResponseID, channel.ID, usedKey.ID, ttl, req.internalRequest.IsOpenAIExactReplayRequest())
-					}
+			// 同通道重试耗尽后记录熔断器失败
+			if !result.Success && !result.Written && !result.Canceled && !result.ResetConversation {
+				failureKind := circuitFailureKind(group.RetryEnabled, result.StatusCode)
+				balancer.RecordFailure(channel.ID, usedKey.ID, internalRequest.Model, failureKind)
+				outlierwindow.Report(channel.ID, false, result.StatusCode, time.Now())
+				if failureKind == balancer.FailureHard {
+					maybeLearnManagedRoute(c.Request.Context(), channel.ID, internalRequest.Model, inboundType, result.Err)
 				}
 			}
 
-			metrics.SaveWithChannelStats(c.Request.Context(), true, nil, iter.Attempts(), false)
-			return
-		}
-		if result.Canceled {
-			// Double-check completion from metrics (soft finish_reason / usage).
-			if metricsSuggestCompletedStream(metrics) {
-				log.Debugf("client cancel after completed stream metrics, treating as success")
+			if result.Success {
+				outlierwindow.Report(channel.ID, true, result.StatusCode, time.Now())
+
+				// === HTTP Replay 状态保存 ===
+				// 成功后，如果是 OpenAI Responses HTTP 请求，保存 replay 状态供后续续接
+				// 注意：exact replay 请求成功后也需要保存新状态，否则只能续接一轮
+				// 优先使用 metrics.InternalResponse（streaming 安全），避免二次 GetInternalResponse 消耗聚合器
+				if inboundType == inbound.InboundTypeOpenAIResponse &&
+					req.internalRequest.RawAPIFormat == model.APIFormatOpenAIResponse {
+					internalResponse := metrics.InternalResponse
+					if internalResponse == nil {
+						var err error
+						internalResponse, err = inAdapter.GetInternalResponse(c.Request.Context())
+						if err != nil {
+							log.Debugf("failed to get internal response for replay state save: %v", err)
+						}
+					}
+					if internalResponse != nil {
+						// 如果是 exact replay 请求，基于已有状态继续累积
+						var newState *wsConversationState
+						if req.internalRequest.IsOpenAIExactReplayRequest() && responsesReplayState != nil {
+							newState = cloneWSConversationState(responsesReplayState)
+							if newState != nil {
+								newState.ChannelID = channel.ID
+								newState.ChannelKeyID = usedKey.ID
+							}
+						}
+						if newState == nil {
+							newState = &wsConversationState{
+								RequestModel: requestModel,
+								ChannelID:    channel.ID,
+								ChannelKeyID: usedKey.ID,
+							}
+						}
+						newState.ApplySuccessfulTurn(req.internalRequest, internalResponse)
+						if newState.LastResponseID != "" {
+							ttl := wsConversationStateTTL(group.SessionKeepTime)
+							storeResponsesReplayState(apiKeyID, group.ID, requestModel, newState, ttl)
+							log.Debugf("saved HTTP replay state (apikey=%d, group=%d, model=%s, response_id=%s, channel=%d, key=%d, ttl=%v, is_replay=%t)",
+								apiKeyID, group.ID, requestModel, newState.LastResponseID, channel.ID, usedKey.ID, ttl, req.internalRequest.IsOpenAIExactReplayRequest())
+						}
+					}
+				}
+
 				metrics.SaveWithChannelStats(c.Request.Context(), true, nil, iter.Attempts(), false)
-			} else {
+				return
+			}
+			if result.Canceled {
+				// Double-check completion from metrics (soft finish_reason / usage).
+				if metricsSuggestCompletedStream(metrics) {
+					log.Debugf("client cancel after completed stream metrics, treating as success")
+					metrics.SaveWithChannelStats(c.Request.Context(), true, nil, iter.Attempts(), false)
+				} else {
+					metrics.SaveWithChannelStats(c.Request.Context(), false, result.Err, iter.Attempts(), false)
+				}
+				return
+			}
+			if result.ResetConversation {
 				metrics.SaveWithChannelStats(c.Request.Context(), false, result.Err, iter.Attempts(), false)
+				if publicErr, ok := classifyWSPublicError(result.Err, result.StatusCode); ok {
+					hb.FlushOrError(c, publicErr.Status, publicErr.Message)
+				} else {
+					hb.FlushOrError(c, result.StatusCode, result.Err.Error())
+				}
+				return
 			}
-			return
-		}
-		if result.ResetConversation {
-			metrics.SaveWithChannelStats(c.Request.Context(), false, result.Err, iter.Attempts(), false)
-			if publicErr, ok := classifyWSPublicError(result.Err, result.StatusCode); ok {
-				hb.FlushOrError(c, publicErr.Status, publicErr.Message)
-			} else {
-				hb.FlushOrError(c, result.StatusCode, result.Err.Error())
+			if result.Written {
+				// Stream started but failed mid-way. If usage/content already look
+				// complete (common when upstream drops after last token), count success.
+				if metricsSuggestCompletedStream(metrics) {
+					log.Debugf("stream written then error but metrics complete, treating as success")
+					metrics.SaveWithChannelStats(c.Request.Context(), true, nil, iter.Attempts(), false)
+				} else {
+					metrics.SaveWithChannelStats(c.Request.Context(), false, result.Err, iter.Attempts(), false)
+				}
+				return
 			}
-			return
+			log.Debugf("continuing to next channel after failed attempt (channel=%s status=%d remaining_candidates=%d)",
+				channel.Name, result.StatusCode, iter.Len()-iter.Index()-1)
+			lastErr = result.Err
+			lastResult = result
 		}
-		if result.Written {
-			// Stream started but failed mid-way. If usage/content already look
-			// complete (common when upstream drops after last token), count success.
-			if metricsSuggestCompletedStream(metrics) {
-				log.Debugf("stream written then error but metrics complete, treating as success")
-				metrics.SaveWithChannelStats(c.Request.Context(), true, nil, iter.Attempts(), false)
-			} else {
-				metrics.SaveWithChannelStats(c.Request.Context(), false, result.Err, iter.Attempts(), false)
-			}
-			return
-		}
-		log.Debugf("continuing to next channel after failed attempt (channel=%s status=%d remaining_candidates=%d)",
-			channel.Name, result.StatusCode, iter.Len()-iter.Index()-1)
-		lastErr = result.Err
-		lastResult = result
 	}
 
 	// 所有候选通道均失败

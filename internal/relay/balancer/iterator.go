@@ -12,8 +12,8 @@ import (
 type stickySource string
 
 const (
-	stickySourceNone         stickySource = ""
-	stickySourcePreferred    stickySource = "preferred"     // HTTP/WS replay or explicit preference
+	stickySourceNone        stickySource = ""
+	stickySourcePreferred   stickySource = "preferred"    // HTTP/WS replay or explicit preference
 	stickySourceSessionKeep stickySource = "session_keep" // group session stickiness
 )
 
@@ -98,6 +98,11 @@ func NewIteratorWithPreference(group model.Group, apiKeyID int, requestModel str
 func (it *Iterator) Next() bool {
 	it.index++
 	return it.index < len(it.candidates)
+}
+
+// Reset starts another pass over the same ordered candidate list.
+func (it *Iterator) Reset() {
+	it.index = -1
 }
 
 // Item 返回当前候选的 GroupItem

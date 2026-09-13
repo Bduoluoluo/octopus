@@ -33,16 +33,18 @@ func TestGetChannelKeyUsesPreferredKeyAfterRecent429(t *testing.T) {
 	}
 }
 
-func TestGetChannelKeyUsesLowestCostKeyAfterRecent429(t *testing.T) {
+func TestGetChannelKeyUsesLowestIDKey(t *testing.T) {
 	channel := &Channel{
 		Keys: []ChannelKey{
-			{ID: 1, Enabled: true, ChannelKey: "recent-429", TotalCost: 1, StatusCode: 429, LastUseTimeStamp: time.Now().Unix()},
-			{ID: 2, Enabled: true, ChannelKey: "other", TotalCost: 100},
+			{ID: 9, Enabled: true, ChannelKey: "higher-id", TotalCost: 1},
+			{ID: 3, Enabled: true, ChannelKey: "lower-id", TotalCost: 100},
+			{ID: 1, Enabled: false, ChannelKey: "disabled-lowest-id", TotalCost: 0},
+			{ID: 2, Enabled: true, ChannelKey: "", TotalCost: 0},
 		},
 	}
 
 	selected := channel.GetChannelKey()
-	if selected.ID != 1 {
-		t.Fatalf("expected lowest cost key 1 despite recent 429, got %d", selected.ID)
+	if selected.ID != 3 {
+		t.Fatalf("expected lowest enabled non-empty key ID 3, got %d", selected.ID)
 	}
 }

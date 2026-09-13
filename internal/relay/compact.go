@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/xuanli27/octopus/internal/helper"
 	dbmodel "github.com/xuanli27/octopus/internal/model"
 	"github.com/xuanli27/octopus/internal/op"
@@ -21,7 +22,6 @@ import (
 	"github.com/xuanli27/octopus/internal/transformer/outbound"
 	openaiOutbound "github.com/xuanli27/octopus/internal/transformer/outbound/openai"
 	"github.com/xuanli27/octopus/internal/utils/log"
-	"github.com/gin-gonic/gin"
 )
 
 type responsesCompactRequest struct {
@@ -88,6 +88,7 @@ func HandleResponsesCompact(c *gin.Context) {
 	var lastErr error
 	var lastStatusCode int
 	var lastRetryAfter time.Duration
+	retryChannels := make(map[int]bool)
 
 	maxSameChannelRetries := 1
 	if group.RetryEnabled {
@@ -97,100 +98,97 @@ func HandleResponsesCompact(c *gin.Context) {
 		}
 	}
 
-	for iter.Next() {
-		select {
-		case <-c.Request.Context().Done():
-			log.Infof("compact request context canceled, stopping retry")
-			metrics.SaveWithChannelStats(c.Request.Context(), false, context.Canceled, iter.Attempts(), false)
-			return
-		default:
+	for round := 0; round < maxSameChannelRetries; round++ {
+		if round > 0 {
+			iter.Reset()
 		}
-
-		item := iter.Item()
-		channel, err := op.ChannelGet(item.ChannelID, c.Request.Context())
-		if err != nil {
-			iter.Skip(item.ChannelID, 0, fmt.Sprintf("channel_%d", item.ChannelID), fmt.Sprintf("channel not found: %v", err))
-			lastErr = err
-			continue
-		}
-		if !channel.Enabled {
-			iter.Skip(channel.ID, 0, channel.Name, "channel disabled")
-			continue
-		}
-		if !supportsResponsesCompact(channel.Type) {
-			iter.Skip(channel.ID, 0, channel.Name, "channel type not compatible with responses compact")
-			continue
-		}
-
-		selectOpts := dbmodel.ChannelKeySelectOptions{
-			ExcludeKeyIDs:  make(map[int]struct{}),
-			PreferredKeyID: iter.StickyKeyID(),
-		}
-		var usedKey dbmodel.ChannelKey
-		for {
-			usedKey = channel.GetChannelKey(selectOpts)
-			if usedKey.ChannelKey == "" {
-				break
+		for iter.Next() {
+			select {
+			case <-c.Request.Context().Done():
+				log.Infof("compact request context canceled, stopping retry")
+				metrics.SaveWithChannelStats(c.Request.Context(), false, context.Canceled, iter.Attempts(), false)
+				return
+			default:
 			}
-			if !iter.SkipCircuitBreak(channel.ID, usedKey.ID, channel.Name) {
-				break
-			}
-			selectOpts.ExcludeKeyIDs[usedKey.ID] = struct{}{}
-			usedKey = dbmodel.ChannelKey{}
-		}
-		if usedKey.ChannelKey == "" {
-			if len(selectOpts.ExcludeKeyIDs) == 0 {
-				iter.Skip(channel.ID, 0, channel.Name, "no available key")
-			}
-			continue
-		}
 
-		var attemptErr error
-		var statusCode int
-		var retryAfter time.Duration
-		var success bool
+			item := iter.Item()
+			if round > 0 && !retryChannels[item.ChannelID] {
+				iter.Skip(item.ChannelID, 0, fmt.Sprintf("channel_%d", item.ChannelID), "not eligible for retry")
+				continue
+			}
+			channel, err := op.ChannelGet(item.ChannelID, c.Request.Context())
+			if err != nil {
+				iter.Skip(item.ChannelID, 0, fmt.Sprintf("channel_%d", item.ChannelID), fmt.Sprintf("channel not found: %v", err))
+				lastErr = err
+				continue
+			}
+			if !channel.Enabled {
+				iter.Skip(channel.ID, 0, channel.Name, "channel disabled")
+				continue
+			}
+			if !supportsResponsesCompact(channel.Type) {
+				iter.Skip(channel.ID, 0, channel.Name, "channel type not compatible with responses compact")
+				continue
+			}
 
-		for retryNum := 0; retryNum < maxSameChannelRetries; retryNum++ {
-			if retryNum > 0 {
-				delay := computeBackoff(retryNum, retryAfter)
-				select {
-				case <-c.Request.Context().Done():
-					metrics.SaveWithChannelStats(c.Request.Context(), false, context.Canceled, iter.Attempts(), false)
-					return
-				case <-time.After(delay):
+			selectOpts := dbmodel.ChannelKeySelectOptions{
+				ExcludeKeyIDs:  make(map[int]struct{}),
+				PreferredKeyID: iter.StickyKeyID(),
+			}
+			var usedKey dbmodel.ChannelKey
+			for {
+				usedKey = channel.GetChannelKey(selectOpts)
+				if usedKey.ChannelKey == "" {
+					break
 				}
+				if !iter.SkipCircuitBreak(channel.ID, usedKey.ID, channel.Name) {
+					break
+				}
+				selectOpts.ExcludeKeyIDs[usedKey.ID] = struct{}{}
+				usedKey = dbmodel.ChannelKey{}
+			}
+			if usedKey.ChannelKey == "" {
+				if len(selectOpts.ExcludeKeyIDs) == 0 {
+					iter.Skip(channel.ID, 0, channel.Name, "no available key")
+				}
+				continue
 			}
 
+			var attemptErr error
+			var statusCode int
+			var retryAfter time.Duration
+			var success bool
 			statusCode, retryAfter, attemptErr = forwardResponsesCompact(c, metrics, iter, channel, usedKey, body)
 			if attemptErr == nil {
 				success = true
-				break
 			}
-			if !isRetryableStatus(statusCode) {
-				break
+			if success || !isRetryableStatus(statusCode) {
+				retryChannels[channel.ID] = false
+			} else {
+				retryChannels[channel.ID] = true
 			}
+
+			usedKey.StatusCode = statusCode
+			usedKey.LastUseTimeStamp = time.Now().Unix()
+			op.ChannelKeyUpdate(usedKey)
+
+			if success {
+				op.StatsChannelUpdate(channel.ID, dbmodel.StatsMetrics{RequestSuccess: 1})
+				balancer.RecordSuccess(channel.ID, usedKey.ID, requestModel)
+				balancer.SetSticky(apiKeyID, requestModel, channel.ID, usedKey.ID)
+				outlierwindow.Report(channel.ID, true, statusCode, time.Now())
+				metrics.SaveWithChannelStats(c.Request.Context(), true, nil, iter.Attempts(), false)
+				return
+			}
+
+			op.StatsChannelUpdate(channel.ID, dbmodel.StatsMetrics{RequestFailed: 1})
+			failureKind := circuitFailureKind(group.RetryEnabled, statusCode)
+			balancer.RecordFailure(channel.ID, usedKey.ID, requestModel, failureKind)
+			outlierwindow.Report(channel.ID, false, statusCode, time.Now())
+			lastErr = attemptErr
+			lastStatusCode = statusCode
+			lastRetryAfter = retryAfter
 		}
-
-		usedKey.StatusCode = statusCode
-		usedKey.LastUseTimeStamp = time.Now().Unix()
-		op.ChannelKeyUpdate(usedKey)
-
-		if success {
-			op.StatsChannelUpdate(channel.ID, dbmodel.StatsMetrics{RequestSuccess: 1})
-			balancer.RecordSuccess(channel.ID, usedKey.ID, requestModel)
-			balancer.SetSticky(apiKeyID, requestModel, channel.ID, usedKey.ID)
-			outlierwindow.Report(channel.ID, true, statusCode, time.Now())
-			metrics.SaveWithChannelStats(c.Request.Context(), true, nil, iter.Attempts(), false)
-			return
-		}
-
-		op.StatsChannelUpdate(channel.ID, dbmodel.StatsMetrics{RequestFailed: 1})
-		failureKind := circuitFailureKind(group.RetryEnabled, statusCode)
-		balancer.RecordFailure(channel.ID, usedKey.ID, requestModel, failureKind)
-		outlierwindow.Report(channel.ID, false, statusCode, time.Now())
-		lastErr = attemptErr
-		lastStatusCode = statusCode
-		lastRetryAfter = retryAfter
 	}
 
 	metrics.SaveWithChannelStats(c.Request.Context(), false, lastErr, iter.Attempts(), false)

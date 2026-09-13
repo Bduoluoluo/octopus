@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/coder/websocket"
+	"github.com/gin-gonic/gin"
 	dbmodel "github.com/xuanli27/octopus/internal/model"
 	"github.com/xuanli27/octopus/internal/op"
 	"github.com/xuanli27/octopus/internal/relay/balancer"
@@ -15,8 +17,6 @@ import (
 	transformerModel "github.com/xuanli27/octopus/internal/transformer/model"
 	"github.com/xuanli27/octopus/internal/transformer/outbound"
 	"github.com/xuanli27/octopus/internal/utils/log"
-	"github.com/coder/websocket"
-	"github.com/gin-gonic/gin"
 )
 
 const (
@@ -453,101 +453,92 @@ func runWSRelay(ctx context.Context, req *relayRequest, group *dbmodel.Group) ws
 
 	var lastErr error
 	var lastResult attemptResult
+	retryChannels := make(map[int]bool)
 	maxChannelAttempts := req.iter.Len()
 	if replayExact && maxChannelAttempts > 3 {
 		maxChannelAttempts = 3
 	}
 
-	for req.iter.Next() {
-		if req.iter.Index() >= maxChannelAttempts {
-			break
+	for round := 0; round < maxSameChannelRetries; round++ {
+		if round > 0 {
+			req.iter.Reset()
 		}
-		select {
-		case <-relayCtx.Done():
-			if isLocalRelayBudgetExceeded(relayCtx, contextError(relayCtx)) {
-				publicErr := wsPublicError{
-					Status:  http.StatusGatewayTimeout,
-					Code:    "replay_recovery_timeout",
-					Message: "exact replay 恢复超过本地 15 秒预算，请重试",
-				}
-				return wsRelayResult{Err: contextError(relayCtx), PublicError: &publicErr}
-			}
-			return wsRelayResult{Canceled: true, Err: relayCtx.Err()}
-		default:
-		}
-
-		item := req.iter.Item()
-
-		channel, err := op.ChannelGet(item.ChannelID, ctx)
-		if err != nil {
-			req.iter.Skip(item.ChannelID, 0, fmt.Sprintf("channel_%d", item.ChannelID), fmt.Sprintf("channel not found: %v", err))
-			lastErr = err
-			continue
-		}
-		if !channel.Enabled {
-			req.iter.Skip(channel.ID, 0, channel.Name, "channel disabled")
-			continue
-		}
-
-		outAdapter := outbound.Get(channel.Type)
-		if outAdapter == nil {
-			req.iter.Skip(channel.ID, 0, channel.Name, fmt.Sprintf("unsupported channel type: %d", channel.Type))
-			continue
-		}
-
-		if !outbound.IsChatChannelType(channel.Type) {
-			req.iter.Skip(channel.ID, 0, channel.Name, "channel type not compatible with chat request")
-			continue
-		}
-
-		req.internalRequest.Model = item.ModelName
-
-		selectOpts := dbmodel.ChannelKeySelectOptions{
-			ExcludeKeyIDs:  make(map[int]struct{}),
-			PreferredKeyID: req.iter.StickyKeyID(),
-		}
-
-		var usedKey dbmodel.ChannelKey
-		for {
-			usedKey = channel.GetChannelKey(selectOpts)
-			if usedKey.ChannelKey == "" {
+		for req.iter.Next() {
+			if req.iter.Index() >= maxChannelAttempts {
 				break
 			}
-			if !req.iter.SkipCircuitBreak(channel.ID, usedKey.ID, channel.Name) {
-				break
-			}
-			selectOpts.ExcludeKeyIDs[usedKey.ID] = struct{}{}
-			usedKey = dbmodel.ChannelKey{}
-		}
-		if usedKey.ChannelKey == "" {
-			if len(selectOpts.ExcludeKeyIDs) == 0 {
-				req.iter.Skip(channel.ID, 0, channel.Name, "no available key")
-			}
-			continue
-		}
-
-		log.Debugf("ws request model %s, forwarding to channel: %s model: %s (attempt %d/%d)",
-			req.requestModel, channel.Name, item.ModelName, req.iter.Index()+1, req.iter.Len())
-
-		var result attemptResult
-		for retryNum := 0; retryNum < maxSameChannelRetries; retryNum++ {
-			if retryNum > 0 {
-				delay := computeBackoff(retryNum, result.RetryAfter)
-				select {
-				case <-relayCtx.Done():
-					if isLocalRelayBudgetExceeded(relayCtx, contextError(relayCtx)) {
-						publicErr := wsPublicError{
-							Status:  http.StatusGatewayTimeout,
-							Code:    "replay_recovery_timeout",
-							Message: "exact replay 恢复超过本地 15 秒预算，请重试",
-						}
-						return wsRelayResult{Err: contextError(relayCtx), PublicError: &publicErr}
+			select {
+			case <-relayCtx.Done():
+				if isLocalRelayBudgetExceeded(relayCtx, contextError(relayCtx)) {
+					publicErr := wsPublicError{
+						Status:  http.StatusGatewayTimeout,
+						Code:    "replay_recovery_timeout",
+						Message: "exact replay 恢复超过本地 15 秒预算，请重试",
 					}
-					return wsRelayResult{Canceled: true, Err: relayCtx.Err()}
-				case <-time.After(delay):
+					return wsRelayResult{Err: contextError(relayCtx), PublicError: &publicErr}
 				}
+				return wsRelayResult{Canceled: true, Err: relayCtx.Err()}
+			default:
 			}
 
+			item := req.iter.Item()
+			if round > 0 && !retryChannels[item.ChannelID] {
+				req.iter.Skip(item.ChannelID, 0, fmt.Sprintf("channel_%d", item.ChannelID), "not eligible for retry")
+				continue
+			}
+
+			channel, err := op.ChannelGet(item.ChannelID, ctx)
+			if err != nil {
+				req.iter.Skip(item.ChannelID, 0, fmt.Sprintf("channel_%d", item.ChannelID), fmt.Sprintf("channel not found: %v", err))
+				lastErr = err
+				continue
+			}
+			if !channel.Enabled {
+				req.iter.Skip(channel.ID, 0, channel.Name, "channel disabled")
+				continue
+			}
+
+			outAdapter := outbound.Get(channel.Type)
+			if outAdapter == nil {
+				req.iter.Skip(channel.ID, 0, channel.Name, fmt.Sprintf("unsupported channel type: %d", channel.Type))
+				continue
+			}
+
+			if !outbound.IsChatChannelType(channel.Type) {
+				req.iter.Skip(channel.ID, 0, channel.Name, "channel type not compatible with chat request")
+				continue
+			}
+
+			req.internalRequest.Model = item.ModelName
+
+			selectOpts := dbmodel.ChannelKeySelectOptions{
+				ExcludeKeyIDs:  make(map[int]struct{}),
+				PreferredKeyID: req.iter.StickyKeyID(),
+			}
+
+			var usedKey dbmodel.ChannelKey
+			for {
+				usedKey = channel.GetChannelKey(selectOpts)
+				if usedKey.ChannelKey == "" {
+					break
+				}
+				if !req.iter.SkipCircuitBreak(channel.ID, usedKey.ID, channel.Name) {
+					break
+				}
+				selectOpts.ExcludeKeyIDs[usedKey.ID] = struct{}{}
+				usedKey = dbmodel.ChannelKey{}
+			}
+			if usedKey.ChannelKey == "" {
+				if len(selectOpts.ExcludeKeyIDs) == 0 {
+					req.iter.Skip(channel.ID, 0, channel.Name, "no available key")
+				}
+				continue
+			}
+
+			log.Debugf("ws request model %s, forwarding to channel: %s model: %s (attempt %d/%d)",
+				req.requestModel, channel.Name, item.ModelName, req.iter.Index()+1, req.iter.Len())
+
+			var result attemptResult
 			ra := &relayAttempt{
 				relayRequest:         req,
 				outAdapter:           outAdapter,
@@ -555,39 +546,40 @@ func runWSRelay(ctx context.Context, req *relayRequest, group *dbmodel.Group) ws
 				usedKey:              usedKey,
 				firstTokenTimeOutSec: group.FirstTokenTimeOut,
 			}
-
 			result = ra.attempt()
 			if result.Success || result.Written || result.Canceled || result.ResetConversation || !isRetryableStatus(result.StatusCode) {
-				break
+				retryChannels[channel.ID] = false
+			} else {
+				retryChannels[channel.ID] = true
 			}
-		}
 
-		if !result.Success && !result.Written && !result.Canceled && !result.ResetConversation {
-			failureKind := circuitFailureKind(group.RetryEnabled, result.StatusCode)
-			if replayExact && result.StatusCode == http.StatusServiceUnavailable && isNoAvailableAccountError(relayErrorMessage(result.Err)) {
-				failureKind = balancer.FailureHard
+			if !result.Success && !result.Written && !result.Canceled && !result.ResetConversation {
+				failureKind := circuitFailureKind(group.RetryEnabled, result.StatusCode)
+				if replayExact && result.StatusCode == http.StatusServiceUnavailable && isNoAvailableAccountError(relayErrorMessage(result.Err)) {
+					failureKind = balancer.FailureHard
+				}
+				balancer.RecordFailure(channel.ID, usedKey.ID, req.internalRequest.Model, failureKind)
 			}
-			balancer.RecordFailure(channel.ID, usedKey.ID, req.internalRequest.Model, failureKind)
-		}
 
-		if result.Success {
-			var respID string
-			if req.metrics.InternalResponse != nil {
-				respID = req.metrics.InternalResponse.ID
+			if result.Success {
+				var respID string
+				if req.metrics.InternalResponse != nil {
+					respID = req.metrics.InternalResponse.ID
+				}
+				return wsRelayResult{Success: true, ResponseID: respID}
 			}
-			return wsRelayResult{Success: true, ResponseID: respID}
-		}
-		if result.ResetConversation {
-			if publicErr, ok := classifyWSPublicError(result.Err, result.StatusCode); ok {
-				return wsRelayResult{ResetConversation: publicErr.ResetConversation, Err: result.Err, PublicError: &publicErr}
+			if result.ResetConversation {
+				if publicErr, ok := classifyWSPublicError(result.Err, result.StatusCode); ok {
+					return wsRelayResult{ResetConversation: publicErr.ResetConversation, Err: result.Err, PublicError: &publicErr}
+				}
+				return wsRelayResult{ResetConversation: true, Err: result.Err}
 			}
-			return wsRelayResult{ResetConversation: true, Err: result.Err}
+			if result.Canceled || result.Written {
+				return wsRelayResult{Written: result.Written, Canceled: result.Canceled, Err: result.Err}
+			}
+			lastErr = result.Err
+			lastResult = result
 		}
-		if result.Canceled || result.Written {
-			return wsRelayResult{Written: result.Written, Canceled: result.Canceled, Err: result.Err}
-		}
-		lastErr = result.Err
-		lastResult = result
 	}
 
 	if publicErr, ok := classifyWSPublicError(lastErr, lastResult.StatusCode); ok {
