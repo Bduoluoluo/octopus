@@ -14,13 +14,13 @@ import (
 	"github.com/xuanli27/octopus/internal/utils/log"
 	"github.com/xuanli27/octopus/internal/utils/xstrings"
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 )
 
 var channelCache = cache.New[int, model.Channel](16)
 var channelKeyCache = cache.New[int, model.ChannelKey](16)
 var channelKeyCacheNeedUpdate = make(map[int]struct{})
 var channelKeyCacheNeedUpdateLock sync.Mutex
+var channelKeySaveLock sync.Mutex
 
 func ChannelList(ctx context.Context) ([]model.Channel, error) {
 	channels := make([]model.Channel, 0, channelCache.Len())
@@ -83,10 +83,20 @@ func ChannelKeyUpdate(key model.ChannelKey) error {
 	if key.ID == 0 || key.ChannelID == 0 {
 		return fmt.Errorf("invalid channel key")
 	}
+	channelKeyCacheNeedUpdateLock.Lock()
+	defer channelKeyCacheNeedUpdateLock.Unlock()
 	ch, ok := channelCache.Get(key.ChannelID)
 	if !ok {
 		return fmt.Errorf("channel not found")
 	}
+	cached, ok := channelKeyCache.Get(key.ID)
+	if !ok || cached.ChannelID != key.ChannelID {
+		return fmt.Errorf("channel key not found")
+	}
+	cached.TotalCost = key.TotalCost
+	cached.StatusCode = key.StatusCode
+	cached.LastUseTimeStamp = key.LastUseTimeStamp
+	key = cached
 	if len(ch.Keys) > 0 {
 		keys := make([]model.ChannelKey, len(ch.Keys))
 		copy(keys, ch.Keys)
@@ -100,12 +110,12 @@ func ChannelKeyUpdate(key model.ChannelKey) error {
 	}
 	channelCache.Set(key.ChannelID, ch)
 	channelKeyCache.Set(key.ID, key)
-	channelKeyCacheNeedUpdateLock.Lock()
 	channelKeyCacheNeedUpdate[key.ID] = struct{}{}
-	channelKeyCacheNeedUpdateLock.Unlock()
 	return nil
 }
 func ChannelBaseUrlUpdate(channelID int, baseUrl []model.BaseUrl) error {
+	channelKeyCacheNeedUpdateLock.Lock()
+	defer channelKeyCacheNeedUpdateLock.Unlock()
 	ch, ok := channelCache.Get(channelID)
 	if !ok {
 		return fmt.Errorf("channel not found")
@@ -124,32 +134,37 @@ func ChannelBaseUrlUpdate(channelID int, baseUrl []model.BaseUrl) error {
 
 // ChannelKeySaveDB 将运行时更新过的 ChannelKey 缓存写入数据库。
 func ChannelKeySaveDB(ctx context.Context) error {
+	channelKeySaveLock.Lock()
+	defer channelKeySaveLock.Unlock()
 	channelKeyCacheNeedUpdateLock.Lock()
 	keyIDs := make([]int, 0, len(channelKeyCacheNeedUpdate))
+	rows := make([]model.ChannelKey, 0, len(channelKeyCacheNeedUpdate))
 	for id := range channelKeyCacheNeedUpdate {
 		keyIDs = append(keyIDs, id)
+		if key, ok := channelKeyCache.Get(id); ok {
+			rows = append(rows, key)
+		}
 	}
 	channelKeyCacheNeedUpdate = make(map[int]struct{})
 	channelKeyCacheNeedUpdateLock.Unlock()
 
-	if len(keyIDs) == 0 {
-		return nil
-	}
-
-	rows := make([]model.ChannelKey, 0, len(keyIDs))
-	for _, id := range keyIDs {
-		k, ok := channelKeyCache.Get(id)
-		if ok {
-			rows = append(rows, k)
-		}
-	}
 	if len(rows) == 0 {
 		return nil
 	}
-	if err := db.GetDB().WithContext(ctx).Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "id"}},
-		UpdateAll: true,
-	}).CreateInBatches(&rows, 100).Error; err != nil {
+	if err := db.GetDB().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		for _, key := range rows {
+			if err := tx.Model(&model.ChannelKey{}).
+				Where("id = ? AND channel_id = ?", key.ID, key.ChannelID).
+				Updates(map[string]any{
+					"total_cost":          key.TotalCost,
+					"status_code":         key.StatusCode,
+					"last_use_time_stamp": key.LastUseTimeStamp,
+				}).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
 		channelKeyCacheNeedUpdateLock.Lock()
 		for _, id := range keyIDs {
 			channelKeyCacheNeedUpdate[id] = struct{}{}
@@ -348,13 +363,12 @@ func ChannelUpdate(req *model.ChannelUpdateRequest, ctx context.Context) (*model
 
 	channel, _ := channelCache.Get(req.ID)
 	normalizeChannelProxyFields(&channel)
-	channelCache.Set(req.ID, channel)
 	resetBalancerStateForChannel(req.ID)
 	return &channel, nil
 }
 
 func ChannelEnabled(id int, enabled bool, ctx context.Context) error {
-	oldChannel, ok := channelCache.Get(id)
+	_, ok := channelCache.Get(id)
 	if !ok {
 		return fmt.Errorf("channel not found")
 	}
@@ -366,24 +380,24 @@ func ChannelEnabled(id int, enabled bool, ctx context.Context) error {
 	if err := db.GetDB().WithContext(ctx).Model(&model.Channel{}).Where("id = ?", id).Update("enabled", enabled).Error; err != nil {
 		return err
 	}
-	oldChannel.Enabled = enabled
-	normalizeChannelProxyFields(&oldChannel)
-	channelCache.Set(id, oldChannel)
+	if err := channelRefreshCacheByID(id, ctx); err != nil {
+		return err
+	}
 	resetBalancerStateForChannel(id)
 	return nil
 }
 
 func ChannelEnabledManaged(id int, enabled bool, ctx context.Context) error {
-	oldChannel, ok := channelCache.Get(id)
+	_, ok := channelCache.Get(id)
 	if !ok {
 		return fmt.Errorf("channel not found")
 	}
 	if err := db.GetDB().WithContext(ctx).Model(&model.Channel{}).Where("id = ?", id).Update("enabled", enabled).Error; err != nil {
 		return err
 	}
-	oldChannel.Enabled = enabled
-	normalizeChannelProxyFields(&oldChannel)
-	channelCache.Set(id, oldChannel)
+	if err := channelRefreshCacheByID(id, ctx); err != nil {
+		return err
+	}
 	resetBalancerStateForChannel(id)
 	return nil
 }
@@ -460,12 +474,15 @@ func channelDel(id int, ctx context.Context, bypassManagedCheck bool) error {
 	}
 
 	// 删除缓存
+	channelKeyCacheNeedUpdateLock.Lock()
 	channelCache.Del(id)
 	for _, k := range ch.Keys {
 		if k.ID != 0 {
 			channelKeyCache.Del(k.ID)
+			delete(channelKeyCacheNeedUpdate, k.ID)
 		}
 	}
+	channelKeyCacheNeedUpdateLock.Unlock()
 	StatsChannelDel(id)
 	resetBalancerStateForChannel(id)
 
@@ -590,6 +607,7 @@ func ChannelGetByName(name string, ctx context.Context) (*model.Channel, error) 
 		Where("name = ?", trimmed).
 		First(&channel).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
+			channelKeyCacheNeedUpdateLock.Lock()
 			for id, cached := range channelCache.GetAll() {
 				if cached.Name != trimmed {
 					continue
@@ -598,21 +616,16 @@ func ChannelGetByName(name string, ctx context.Context) (*model.Channel, error) 
 				for _, key := range cached.Keys {
 					if key.ID != 0 {
 						channelKeyCache.Del(key.ID)
+						delete(channelKeyCacheNeedUpdate, key.ID)
 					}
 				}
 			}
+			channelKeyCacheNeedUpdateLock.Unlock()
 		}
 		return nil, err
 	}
 
-	normalizeChannelProxyFields(&channel)
-	channel.Stats = nil
-	channelCache.Set(channel.ID, channel)
-	for _, k := range channel.Keys {
-		if k.ID != 0 {
-			channelKeyCache.Set(k.ID, k)
-		}
-	}
+	cacheRefreshedChannel(&channel)
 
 	return &channel, nil
 }
@@ -642,26 +655,41 @@ func channelRefreshCache(ctx context.Context) error {
 }
 
 func channelRefreshCacheByID(id int, ctx context.Context) error {
-	if old, ok := channelCache.Get(id); ok {
-		for _, k := range old.Keys {
-			if k.ID != 0 {
-				channelKeyCache.Del(k.ID)
-			}
-		}
-	}
 	var channel model.Channel
 	if err := db.GetDB().WithContext(ctx).
 		Preload("Keys").
 		First(&channel, id).Error; err != nil {
 		return err
 	}
-	normalizeChannelProxyFields(&channel)
-	channel.Stats = nil
-	channelCache.Set(channel.ID, channel)
-	for _, k := range channel.Keys {
-		if k.ID != 0 {
-			channelKeyCache.Set(k.ID, k)
+	cacheRefreshedChannel(&channel)
+	return nil
+}
+
+func cacheRefreshedChannel(channel *model.Channel) {
+	channelKeyCacheNeedUpdateLock.Lock()
+	defer channelKeyCacheNeedUpdateLock.Unlock()
+	keyIDs := make(map[int]struct{}, len(channel.Keys))
+	for index := range channel.Keys {
+		key := &channel.Keys[index]
+		keyIDs[key.ID] = struct{}{}
+		if cached, ok := channelKeyCache.Get(key.ID); ok && cached.ChannelID == channel.ID {
+			key.TotalCost = cached.TotalCost
+			key.StatusCode = cached.StatusCode
+			key.LastUseTimeStamp = cached.LastUseTimeStamp
+		}
+		if key.ID != 0 {
+			channelKeyCache.Set(key.ID, *key)
 		}
 	}
-	return nil
+	if old, ok := channelCache.Get(channel.ID); ok {
+		for _, key := range old.Keys {
+			if _, exists := keyIDs[key.ID]; !exists {
+				channelKeyCache.Del(key.ID)
+				delete(channelKeyCacheNeedUpdate, key.ID)
+			}
+		}
+	}
+	normalizeChannelProxyFields(channel)
+	channel.Stats = nil
+	channelCache.Set(channel.ID, *channel)
 }
