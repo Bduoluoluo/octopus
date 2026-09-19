@@ -945,6 +945,11 @@
       "matchRegexPlaceholder": "Optional: regex pattern to match request model names",
       "remark": "Remark",
       "skipHealthProbe": "Skip health probe",
+      "cacheRatio": "Custom cache percentage",
+      "cacheRatioHint": "Override reported cache reads using a random percentage per request (0–100%). Equal bounds use a fixed percentage. This also affects local usage and cost statistics, but does not change upstream caching or charges. Cache creation tokens are preserved and limit the maximum cache reads. Disabled keeps upstream usage.",
+      "cacheRatioMin": "Minimum (%)",
+      "cacheRatioMax": "Maximum (%)",
+      "cacheRatioInvalid": "Cache percentage must satisfy 0 ≤ minimum ≤ maximum ≤ 100.",
       "skipHealthProbeHint": "When enabled, group health checks skip this channel"
     }
   },

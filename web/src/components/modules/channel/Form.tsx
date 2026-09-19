@@ -42,6 +42,9 @@ export interface ChannelFormData {
     enabled: boolean;
     auto_sync: boolean;
     skip_health_probe?: boolean;
+    cache_ratio_enabled: boolean;
+    cache_ratio_min: number;
+    cache_ratio_max: number;
     auto_group: AutoGroupType;
     match_regex: string;
 }
@@ -241,7 +244,16 @@ export function ChannelForm({
     };
 
     return (
-        <form onSubmit={onSubmit} className="space-y-4 px-1">
+        <form onSubmit={(event) => {
+            if (!Number.isFinite(formData.cache_ratio_min) || !Number.isFinite(formData.cache_ratio_max) ||
+                formData.cache_ratio_min < 0 || formData.cache_ratio_max > 100 ||
+                formData.cache_ratio_min > formData.cache_ratio_max) {
+                event.preventDefault();
+                toast.error(t('cacheRatioInvalid'));
+                return;
+            }
+            onSubmit(event);
+        }} className="space-y-4 px-1">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                     <label htmlFor={`${idPrefix}-name`} className="text-sm font-medium text-card-foreground">
@@ -598,6 +610,49 @@ export function ChannelForm({
                     </AccordionContent>
                 </AccordionItem>
             </Accordion>
+
+            <div className="space-y-3 p-4 rounded-xl bg-muted/20 border border-border/50">
+                <label className="flex items-center justify-between gap-3 cursor-pointer">
+                    <span className="text-sm font-medium text-card-foreground">{t('cacheRatio')}</span>
+                    <Switch
+                        checked={formData.cache_ratio_enabled}
+                        onCheckedChange={(checked) => onFormDataChange({ ...formData, cache_ratio_enabled: checked })}
+                    />
+                </label>
+                <p className="text-xs text-muted-foreground">{t('cacheRatioHint')}</p>
+                {formData.cache_ratio_enabled && (
+                    <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-2">
+                            <label htmlFor={`${idPrefix}-cache-ratio-min`} className="text-sm text-card-foreground">{t('cacheRatioMin')}</label>
+                            <Input
+                                id={`${idPrefix}-cache-ratio-min`}
+                                type="number"
+                                min={0}
+                                max={100}
+                                step="0.01"
+                                required
+                                value={formData.cache_ratio_min}
+                                onChange={(event) => onFormDataChange({ ...formData, cache_ratio_min: Number(event.target.value) })}
+                                className="rounded-xl"
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <label htmlFor={`${idPrefix}-cache-ratio-max`} className="text-sm text-card-foreground">{t('cacheRatioMax')}</label>
+                            <Input
+                                id={`${idPrefix}-cache-ratio-max`}
+                                type="number"
+                                min={0}
+                                max={100}
+                                step="0.01"
+                                required
+                                value={formData.cache_ratio_max}
+                                onChange={(event) => onFormDataChange({ ...formData, cache_ratio_max: Number(event.target.value) })}
+                                className="rounded-xl"
+                            />
+                        </div>
+                    </div>
+                )}
+            </div>
 
             <div className="flex flex-wrap items-center justify-between gap-4 p-4 rounded-xl bg-muted/20 border border-border/50">
                 <label className="flex items-center gap-2 cursor-pointer">

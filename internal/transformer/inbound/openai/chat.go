@@ -29,7 +29,7 @@ func (i *ChatInbound) TransformResponse(ctx context.Context, response *model.Int
 	// Store the response for later retrieval
 	i.storedResponse = response
 
-	body, err := json.Marshal(response)
+	body, err := json.Marshal(chatResponseUsage(response))
 	if err != nil {
 		return nil, err
 	}
@@ -43,6 +43,7 @@ func (i *ChatInbound) TransformStream(ctx context.Context, stream *model.Interna
 
 	// Store the chunk for aggregation
 	i.streamAggregator.Add(stream)
+	stream = chatResponseUsage(stream)
 
 	var body []byte
 	var err error
@@ -67,6 +68,27 @@ func (i *ChatInbound) TransformStream(ctx context.Context, stream *model.Interna
 		return nil, err
 	}
 	return []byte("data: " + string(body) + "\n\n"), nil
+}
+
+func chatResponseUsage(response *model.InternalLLMResponse) *model.InternalLLMResponse {
+	if response == nil || !response.Usage.HasAnthropicCacheSemantic() {
+		return response
+	}
+	converted := *response
+	usage := *response.Usage
+	details := model.PromptTokensDetails{}
+	if usage.PromptTokensDetails != nil {
+		details = *usage.PromptTokensDetails
+	}
+	details.CachedTokens = usage.BillableCacheReadInput()
+	usage.PromptTokens = usage.EffectiveInputTokens()
+	usage.PromptTokensDetails = &details
+	usage.CacheReadInputTokens = 0
+	usage.CacheCreationInputTokens = 0
+	usage.CacheCreation5mInputTokens = 0
+	usage.CacheCreation1hInputTokens = 0
+	converted.Usage = &usage
+	return &converted
 }
 
 func (i *ChatInbound) TransformStreamEvents(ctx context.Context, events []model.StreamEvent) ([]byte, error) {

@@ -49,6 +49,9 @@ func ChannelCreate(channel *model.Channel, ctx context.Context) error {
 	if channel == nil {
 		return fmt.Errorf("channel is nil")
 	}
+	if err := channel.ValidateCacheRatio(); err != nil {
+		return err
+	}
 	if channel.ProxyMode == "" {
 		channel.ProxyMode = model.ProxyUsageModeDirect
 	}
@@ -181,6 +184,19 @@ func ChannelUpdate(req *model.ChannelUpdateRequest, ctx context.Context) (*model
 		return nil, fmt.Errorf("channel not found")
 	}
 	normalizeChannelProxyFields(&existingChannel)
+	cacheRatio := existingChannel
+	if req.CacheRatioEnabled != nil {
+		cacheRatio.CacheRatioEnabled = *req.CacheRatioEnabled
+	}
+	if req.CacheRatioMin != nil {
+		cacheRatio.CacheRatioMin = *req.CacheRatioMin
+	}
+	if req.CacheRatioMax != nil {
+		cacheRatio.CacheRatioMax = *req.CacheRatioMax
+	}
+	if err := cacheRatio.ValidateCacheRatio(); err != nil {
+		return nil, err
+	}
 	if !req.BypassManagedCheck {
 		if _, managed, err := ChannelManagedBinding(req.ID, ctx); err != nil {
 			return nil, err
@@ -272,6 +288,18 @@ func ChannelUpdate(req *model.ChannelUpdateRequest, ctx context.Context) (*model
 	if req.SkipHealthProbe != nil {
 		selectFields = append(selectFields, "skip_health_probe")
 		updates.SkipHealthProbe = *req.SkipHealthProbe
+	}
+	if req.CacheRatioEnabled != nil {
+		selectFields = append(selectFields, "cache_ratio_enabled")
+		updates.CacheRatioEnabled = cacheRatio.CacheRatioEnabled
+	}
+	if req.CacheRatioMin != nil {
+		selectFields = append(selectFields, "cache_ratio_min")
+		updates.CacheRatioMin = cacheRatio.CacheRatioMin
+	}
+	if req.CacheRatioMax != nil {
+		selectFields = append(selectFields, "cache_ratio_max")
+		updates.CacheRatioMax = cacheRatio.CacheRatioMax
 	}
 	if req.AutoGroup != nil {
 		selectFields = append(selectFields, "auto_group")

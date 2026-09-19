@@ -234,7 +234,7 @@ func (ra *relayAttempt) handleWSStreamResponseV2(ctx context.Context, reader *ws
 
 	// Create StreamProcessor
 	processor := stream.NewStreamProcessor(stream.StreamConfig{
-		Source:            stream.NewWSSource(reader),
+		Source:            withCacheRatio(stream.NewWSSource(reader), ra.channel, false),
 		Transform:         guardedStreamTransform(transform, false),
 		Writer:            ra.getStreamWriter(),
 		Context:           ctx,
@@ -365,6 +365,7 @@ func (ra *relayAttempt) handleResponsePassthrough(ctx context.Context, response 
 	}
 
 	// Sidecar metrics parse
+	body = newCacheRatioOverride(ra.channel).rewriteJSON(body)
 	sidecarResp := &http.Response{
 		StatusCode: response.StatusCode,
 		Header:     response.Header.Clone(),

@@ -67,6 +67,9 @@ export function CardContent({ channel, stats }: { channel: Channel; stats: Stats
         custom_model: channel.custom_model,
         auto_sync: channel.auto_sync,
         skip_health_probe: !!channel.skip_health_probe,
+        cache_ratio_enabled: !!channel.cache_ratio_enabled,
+        cache_ratio_min: channel.cache_ratio_min ?? 0,
+        cache_ratio_max: channel.cache_ratio_max ?? 0,
         auto_group: channel.auto_group,
         match_regex: channel.match_regex ?? '',
     });
@@ -106,6 +109,9 @@ export function CardContent({ channel, stats }: { channel: Channel; stats: Stats
         }
         if (formData.auto_sync !== channel.auto_sync) req.auto_sync = formData.auto_sync;
         if (!!formData.skip_health_probe !== !!channel.skip_health_probe) req.skip_health_probe = !!formData.skip_health_probe;
+        if (formData.cache_ratio_enabled !== !!channel.cache_ratio_enabled) req.cache_ratio_enabled = formData.cache_ratio_enabled;
+        if (formData.cache_ratio_min !== (channel.cache_ratio_min ?? 0)) req.cache_ratio_min = formData.cache_ratio_min;
+        if (formData.cache_ratio_max !== (channel.cache_ratio_max ?? 0)) req.cache_ratio_max = formData.cache_ratio_max;
         if (formData.auto_group !== channel.auto_group) req.auto_group = formData.auto_group;
         if ((formData.ws_mode ?? 'inherit') !== (channel.ws_mode ?? 'inherit')) req.ws_mode = formData.ws_mode;
 

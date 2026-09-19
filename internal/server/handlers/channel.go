@@ -2,12 +2,14 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/xuanli27/octopus/internal/helper"
 	"github.com/xuanli27/octopus/internal/model"
 	"github.com/xuanli27/octopus/internal/op"
@@ -16,7 +18,6 @@ import (
 	"github.com/xuanli27/octopus/internal/server/router"
 	"github.com/xuanli27/octopus/internal/task"
 	"github.com/xuanli27/octopus/internal/utils/safe"
-	"github.com/gin-gonic/gin"
 )
 
 func init() {
@@ -117,6 +118,10 @@ func createChannel(c *gin.Context) {
 		channel.ProxyConfigID = nil
 	}
 	if err := op.ChannelCreate(&channel, c.Request.Context()); err != nil {
+		if errors.Is(err, model.ErrInvalidCacheRatio) {
+			resp.Error(c, http.StatusBadRequest, err.Error())
+			return
+		}
 		resp.ErrorWithAppError(c, http.StatusInternalServerError, channelError(codeChannelCreateFailed, "channel create failed", err))
 		return
 	}
@@ -143,6 +148,10 @@ func updateChannel(c *gin.Context) {
 	}
 	channel, err := op.ChannelUpdate(&req, c.Request.Context())
 	if err != nil {
+		if errors.Is(err, model.ErrInvalidCacheRatio) {
+			resp.Error(c, http.StatusBadRequest, err.Error())
+			return
+		}
 		resp.ErrorWithAppError(c, http.StatusInternalServerError, channelError(codeChannelUpdateFailed, "channel update failed", err))
 		return
 	}

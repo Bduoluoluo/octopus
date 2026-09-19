@@ -53,7 +53,7 @@ func (ra *relayAttempt) handleStreamResponseV2(ctx context.Context, response *ht
 
 	// Create StreamProcessor
 	processor := stream.NewStreamProcessor(stream.StreamConfig{
-		Source:            stream.NewFramedSSESource(response.Body, maxSSEEventSize),
+		Source:            withCacheRatio(stream.NewFramedSSESource(response.Body, maxSSEEventSize), ra.channel, true),
 		Transform:         guardedStreamTransform(transform, true),
 		Writer:            ra.getStreamWriter(),
 		Context:           ctx,
@@ -114,7 +114,7 @@ func (ra *relayAttempt) handleStreamResponsePassthroughV2(ctx context.Context, r
 
 	// Create StreamProcessor
 	processor := stream.NewStreamProcessor(stream.StreamConfig{
-		Source:            stream.NewFramedSSESource(response.Body, maxSSEEventSize),
+		Source:            withCacheRatio(stream.NewFramedSSESource(response.Body, maxSSEEventSize), ra.channel, true),
 		Transform:         guardedStreamTransform(nil, true),
 		Writer:            ra.getStreamWriter(),
 		Context:           ctx,
@@ -304,6 +304,7 @@ func (ra *relayAttempt) handleResponse(ctx context.Context, response *http.Respo
 	if err := upstreamPayloadError(body, ""); err != nil {
 		return err
 	}
+	body = newCacheRatioOverride(ra.channel).rewriteJSON(body)
 	response.Body = io.NopCloser(bytes.NewReader(body))
 	internalResponse, err := ra.outAdapter.TransformResponse(ctx, response)
 	if err != nil {

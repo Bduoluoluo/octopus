@@ -254,6 +254,7 @@ func forwardResponsesCompact(c *gin.Context, metrics *RelayMetrics, iter *balanc
 	if strings.TrimSpace(contentType) == "" {
 		contentType = "application/json"
 	}
+	body = newCacheRatioOverride(channel).rewriteJSON(body)
 	c.Data(response.StatusCode, contentType, body)
 
 	var compactResp responsesCompactResponse

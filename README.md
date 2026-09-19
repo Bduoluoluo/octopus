@@ -137,6 +137,7 @@ The Dockerfile expects the binary at `build/docker/linux/<architecture>/octopus`
 - Common variables: `OCTOPUS_SERVER_HOST`, `OCTOPUS_SERVER_PORT` (default `8080`), `OCTOPUS_DATABASE_TYPE`, and `OCTOPUS_DATABASE_PATH`.
 - In Settings > Data Management, configure log retention and the database size limit. When the limit is exceeded, the oldest half of relay logs is removed.
 - Channel editing supports single and batch model tests. These send real upstream requests and may incur charges.
+- Custom cache percentage in channel editing is disabled by default. Set minimum and maximum percentages (0–100%); each request uses one random percentage, or a fixed value when the bounds match. Cache reads are rounded down, returned in the client's protocol, and used in local usage and cost statistics. This does not change upstream caching or charges. Existing cache writes are preserved, limiting cache reads to the remaining input. Missing input usage is not fabricated.
 - Model tests and group health probes for OpenAI Chat/Responses channels use streaming `/v1/responses` with `hi`, bundled Codex instructions, the selected model, and a default timeout of 10 seconds per request. The upstream must support Responses; other channel protocols are preserved.
 - In failover groups, Check stops after the first successful candidate; Full probe continues through the remaining candidates. Both check all candidates in other group modes and respect the channel's skip-health-probe setting.
 

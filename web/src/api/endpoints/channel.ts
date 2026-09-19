@@ -73,6 +73,9 @@ export type Channel = {
     auto_sync: boolean;
     /** Skip group health probes for this channel (#102) */
     skip_health_probe?: boolean;
+    cache_ratio_enabled?: boolean;
+    cache_ratio_min?: number;
+    cache_ratio_max?: number;
     auto_group: AutoGroupType;
     custom_header: CustomHeader[];
     ws_mode: ChannelWSMode;
@@ -105,6 +108,9 @@ export type CreateChannelRequest = {
     proxy_config_id?: number | null;
     auto_sync?: boolean;
     skip_health_probe?: boolean;
+    cache_ratio_enabled?: boolean;
+    cache_ratio_min?: number;
+    cache_ratio_max?: number;
     auto_group?: AutoGroupType;
     custom_header?: CustomHeader[];
     ws_mode?: ChannelWSMode;
@@ -127,6 +133,9 @@ export type UpdateChannelRequest = {
     proxy_config_id?: number | null;
     auto_sync?: boolean;
     skip_health_probe?: boolean;
+    cache_ratio_enabled?: boolean;
+    cache_ratio_min?: number;
+    cache_ratio_max?: number;
     auto_group?: AutoGroupType;
     custom_header?: CustomHeader[];
     ws_mode?: ChannelWSMode;

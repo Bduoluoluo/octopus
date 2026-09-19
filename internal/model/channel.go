@@ -60,28 +60,31 @@ func (m ChannelWSMode) Normalize() ChannelWSMode {
 }
 
 type Channel struct {
-	ID              int                   `json:"id" gorm:"primaryKey"`
-	Name            string                `json:"name" gorm:"unique;not null"`
-	Type            outbound.OutboundType `json:"type"`
-	Enabled         bool                  `json:"enabled" gorm:"default:true"`
-	BaseUrls        []BaseUrl             `json:"base_urls" gorm:"serializer:json"`
-	Keys            []ChannelKey          `json:"keys" gorm:"foreignKey:ChannelID"`
-	Model           string                `json:"model"`
-	CustomModel     string                `json:"custom_model"`
-	ProxyMode       ProxyUsageMode        `json:"proxy_mode" gorm:"type:varchar(16);not null;default:'direct'"`
-	ProxyConfigID   *int                  `json:"proxy_config_id"`
-	Proxy           bool                  `json:"-" gorm:"default:false"`
-	AutoSync        bool                  `json:"auto_sync" gorm:"default:false"`
-	SkipHealthProbe bool                  `json:"skip_health_probe" gorm:"default:false"` // issue #102: skip group health probes
-	AutoGroup       AutoGroupType         `json:"auto_group" gorm:"default:0"`
-	CustomHeader    []CustomHeader        `json:"custom_header" gorm:"serializer:json"`
-	WSMode          ChannelWSMode         `json:"ws_mode" gorm:"type:varchar(16);not null;default:'inherit'"`
-	ParamOverride   *string               `json:"param_override"`
-	ChannelProxy    *string               `json:"-" gorm:"column:channel_proxy"`
-	Stats           *StatsChannel         `json:"stats,omitempty" gorm:"foreignKey:ChannelID"`
-	MatchRegex      *string               `json:"match_regex"`
-	Managed         bool                  `json:"managed" gorm:"-"`
-	ManagedSource   *ManagedChannelSource `json:"managed_source,omitempty" gorm:"-"`
+	ID                int                   `json:"id" gorm:"primaryKey"`
+	Name              string                `json:"name" gorm:"unique;not null"`
+	Type              outbound.OutboundType `json:"type"`
+	Enabled           bool                  `json:"enabled" gorm:"default:true"`
+	BaseUrls          []BaseUrl             `json:"base_urls" gorm:"serializer:json"`
+	Keys              []ChannelKey          `json:"keys" gorm:"foreignKey:ChannelID"`
+	Model             string                `json:"model"`
+	CustomModel       string                `json:"custom_model"`
+	ProxyMode         ProxyUsageMode        `json:"proxy_mode" gorm:"type:varchar(16);not null;default:'direct'"`
+	ProxyConfigID     *int                  `json:"proxy_config_id"`
+	Proxy             bool                  `json:"-" gorm:"default:false"`
+	AutoSync          bool                  `json:"auto_sync" gorm:"default:false"`
+	SkipHealthProbe   bool                  `json:"skip_health_probe" gorm:"default:false"` // issue #102: skip group health probes
+	CacheRatioEnabled bool                  `json:"cache_ratio_enabled" gorm:"not null;default:false"`
+	CacheRatioMin     float64               `json:"cache_ratio_min" gorm:"not null;default:0"`
+	CacheRatioMax     float64               `json:"cache_ratio_max" gorm:"not null;default:0"`
+	AutoGroup         AutoGroupType         `json:"auto_group" gorm:"default:0"`
+	CustomHeader      []CustomHeader        `json:"custom_header" gorm:"serializer:json"`
+	WSMode            ChannelWSMode         `json:"ws_mode" gorm:"type:varchar(16);not null;default:'inherit'"`
+	ParamOverride     *string               `json:"param_override"`
+	ChannelProxy      *string               `json:"-" gorm:"column:channel_proxy"`
+	Stats             *StatsChannel         `json:"stats,omitempty" gorm:"foreignKey:ChannelID"`
+	MatchRegex        *string               `json:"match_regex"`
+	Managed           bool                  `json:"managed" gorm:"-"`
+	ManagedSource     *ManagedChannelSource `json:"managed_source,omitempty" gorm:"-"`
 }
 
 func (c *Channel) UnmarshalJSON(data []byte) error {
@@ -138,24 +141,27 @@ type ChannelKeySelectOptions struct {
 
 // ChannelUpdateRequest 渠道更新请求 - 仅包含变更的数据
 type ChannelUpdateRequest struct {
-	ID              int                    `json:"id" binding:"required"`
-	Name            *string                `json:"name,omitempty"`
-	Type            *outbound.OutboundType `json:"type,omitempty"`
-	Enabled         *bool                  `json:"enabled,omitempty"`
-	BaseUrls        *[]BaseUrl             `json:"base_urls,omitempty"`
-	Model           *string                `json:"model,omitempty"`
-	CustomModel     *string                `json:"custom_model,omitempty"`
-	ProxyMode       *ProxyUsageMode        `json:"proxy_mode,omitempty"`
-	ProxyConfigID   *int                   `json:"proxy_config_id,omitempty"`
-	Proxy           *bool                  `json:"-"`
-	AutoSync        *bool                  `json:"auto_sync,omitempty"`
-	SkipHealthProbe *bool                  `json:"skip_health_probe,omitempty"`
-	AutoGroup       *AutoGroupType         `json:"auto_group,omitempty"`
-	CustomHeader    *[]CustomHeader        `json:"custom_header,omitempty"`
-	WSMode          *ChannelWSMode         `json:"ws_mode,omitempty"`
-	ChannelProxy    *string                `json:"-"`
-	ParamOverride   *string                `json:"param_override,omitempty"`
-	MatchRegex      *string                `json:"match_regex,omitempty"`
+	ID                int                    `json:"id" binding:"required"`
+	Name              *string                `json:"name,omitempty"`
+	Type              *outbound.OutboundType `json:"type,omitempty"`
+	Enabled           *bool                  `json:"enabled,omitempty"`
+	BaseUrls          *[]BaseUrl             `json:"base_urls,omitempty"`
+	Model             *string                `json:"model,omitempty"`
+	CustomModel       *string                `json:"custom_model,omitempty"`
+	ProxyMode         *ProxyUsageMode        `json:"proxy_mode,omitempty"`
+	ProxyConfigID     *int                   `json:"proxy_config_id,omitempty"`
+	Proxy             *bool                  `json:"-"`
+	AutoSync          *bool                  `json:"auto_sync,omitempty"`
+	SkipHealthProbe   *bool                  `json:"skip_health_probe,omitempty"`
+	CacheRatioEnabled *bool                  `json:"cache_ratio_enabled,omitempty"`
+	CacheRatioMin     *float64               `json:"cache_ratio_min,omitempty"`
+	CacheRatioMax     *float64               `json:"cache_ratio_max,omitempty"`
+	AutoGroup         *AutoGroupType         `json:"auto_group,omitempty"`
+	CustomHeader      *[]CustomHeader        `json:"custom_header,omitempty"`
+	WSMode            *ChannelWSMode         `json:"ws_mode,omitempty"`
+	ChannelProxy      *string                `json:"-"`
+	ParamOverride     *string                `json:"param_override,omitempty"`
+	MatchRegex        *string                `json:"match_regex,omitempty"`
 
 	KeysToAdd    []ChannelKeyAddRequest    `json:"keys_to_add,omitempty"`
 	KeysToUpdate []ChannelKeyUpdateRequest `json:"keys_to_update,omitempty"`

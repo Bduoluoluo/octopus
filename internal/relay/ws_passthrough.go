@@ -9,11 +9,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/coder/websocket"
 	dbmodel "github.com/xuanli27/octopus/internal/model"
 	transformerModel "github.com/xuanli27/octopus/internal/transformer/model"
 	openaiOutbound "github.com/xuanli27/octopus/internal/transformer/outbound/openai"
 	"github.com/xuanli27/octopus/internal/utils/log"
-	"github.com/coder/websocket"
 )
 
 type wsPassthroughStats struct {
@@ -186,6 +186,7 @@ func (ra *relayAttempt) buildWSPassthroughRequestPayload() ([]byte, error) {
 func (ra *relayAttempt) handleWSPassthroughStream(ctx context.Context, pc *pooledConn) (*wsPassthroughStats, error) {
 	writer := ra.getStreamWriter()
 	stats := &wsPassthroughStats{}
+	cacheRatio := newCacheRatioOverride(ra.channel)
 	firstEvent := true
 	dropDownstream := false
 	readCtx := ctx
@@ -204,6 +205,7 @@ func (ra *relayAttempt) handleWSPassthroughStream(ctx context.Context, pc *poole
 		if msgType != websocket.MessageText {
 			continue
 		}
+		data = cacheRatio.rewriteJSON(data)
 		observeWSPassthroughEvent(stats, data)
 		if stats.Error != nil {
 			if !dropDownstream {

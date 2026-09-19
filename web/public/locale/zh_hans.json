@@ -945,6 +945,11 @@
       "matchRegexPlaceholder": "可选：用于匹配请求模型名称的正则表达式",
       "remark": "备注",
       "skipHealthProbe": "跳过测活",
+      "cacheRatio": "自定义缓存百分比",
+      "cacheRatioHint": "每次请求在区间内随机取一个比例（0–100%），覆盖返回的缓存读入数量；上下限相同则使用固定比例。同步影响本地用量及费用统计，不改变上游实际缓存或收费。已有缓存写入数量保留，缓存读入不会占用这部分。关闭时保留上游用量。",
+      "cacheRatioMin": "左区间（%）",
+      "cacheRatioMax": "右区间（%）",
+      "cacheRatioInvalid": "缓存百分比需满足：0 ≤ 左区间 ≤ 右区间 ≤ 100。",
       "skipHealthProbeHint": "开启后分组健康检查将跳过此渠道（上游不建议探活时使用）"
     }
   },
