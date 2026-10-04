@@ -1,4 +1,16 @@
 {
+  "routeGroup": {
+    "title": "Route groups",
+    "name": "Group name",
+    "create": "New group",
+    "delete": "Delete group",
+    "cancel": "Cancel",
+    "hint": "The same model name can have different routes in each group. API keys select the group.",
+    "keyHint": "This key only accesses models in the selected route group.",
+    "deleteHint": "Delete {name} and all its model routes? Reassign bound API keys first.",
+    "createFailed": "Could not create route group",
+    "deleteFailed": "Could not delete route group"
+  },
   "login": {
     "username": "Username",
     "usernamePlaceholder": "Enter your username",
@@ -648,10 +660,10 @@
       "loading": "Loading...",
       "emptyChannels": "No channels",
       "matchMode": "Match mode",
-      "notice": "Turning a channel off or disabling the global setting will not delete existing model group members. Remove them manually in each model group if needed.",
+      "notice": "All auto-group settings apply only to the current route group. Disabling auto-group does not delete existing model members; remove them manually if needed.",
       "global": {
-        "title": "Global default mode",
-        "description": "When enabled, all site-projected channels use the selected match mode. Per-channel settings below are kept and take effect after the global mode is disabled."
+        "title": "Current group default mode",
+        "description": "Within this route group, all site-projected channels use the selected match mode. Disable it to use the individual channel settings below. Other route groups are unaffected."
       },
       "createMissing": {
         "title": "Create missing groups on exact match",
@@ -672,7 +684,7 @@
         "noModels": "No models",
         "unknownSite": "Unknown site",
         "manualGroup": "Manual channels",
-        "followingGlobalTip": "Global is on; this channel is currently grouped by the global mode. The per-channel mode below takes effect after the global mode is disabled."
+        "followingGlobalTip": "This channel follows the current route group's default mode. Disable that mode to use the individual setting below."
       },
       "bulk": {
         "selected": "{count} selected",

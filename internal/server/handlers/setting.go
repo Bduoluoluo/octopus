@@ -218,6 +218,8 @@ func decodeDBDump(body []byte, dump *model.DBDump) error {
 		len(dump.SiteUserGroups) == 0 &&
 		len(dump.SiteModels) == 0 &&
 		len(dump.SiteChannelBindings) == 0 &&
+		len(dump.RouteGroups) == 0 &&
+		len(dump.RouteGroupChannels) == 0 &&
 		len(dump.Groups) == 0 &&
 		len(dump.GroupItems) == 0 &&
 		len(dump.Settings) == 0 &&

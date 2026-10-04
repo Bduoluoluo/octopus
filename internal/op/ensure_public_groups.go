@@ -58,14 +58,18 @@ func EnsurePublicGroupsForSiteAccount(siteID, accountID int, ctx context.Context
 		channelIDs = append(channelIDs, binding.ChannelID)
 	}
 
-	normalize := AutoGroupNormalizeEnabled()
+	config, err := loadRouteAutoGroupConfig(ctx)
+	if err != nil {
+		return nil, err
+	}
+	normalize := config.normalize
 	result := &EnsurePublicGroupsResult{
 		AccountID: accountID,
 		SiteID:    siteID,
 		Normalize: normalize,
 	}
 
-	beforeGroups, err := GroupList(ctx)
+	beforeGroups, err := GroupListInRouteGroup(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +94,7 @@ func EnsurePublicGroupsForSiteAccount(siteID, accountID int, ctx context.Context
 		result.ChannelsProcessed++
 	}
 
-	afterGroups, err := GroupList(ctx)
+	afterGroups, err := GroupListInRouteGroup(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -139,7 +143,11 @@ func ensurePublicGroupsForChannel(channel *model.Channel, ctx context.Context) {
 	if channel == nil {
 		return
 	}
-	groups, err := GroupList(ctx)
+	config, err := loadRouteAutoGroupConfig(ctx)
+	if err != nil {
+		return
+	}
+	groups, err := GroupListInRouteGroup(ctx)
 	if err != nil {
 		return
 	}
@@ -147,16 +155,16 @@ func ensurePublicGroupsForChannel(channel *model.Channel, ctx context.Context) {
 	aliasIdx, _ := loadPublicAliasIndex(ctx)
 	// Exact reconcile with current normalize + alias dictionary.
 	for _, group := range groups {
-		desired, ok := matchModelsForAutoGroup(model.AutoGroupTypeExact, group, channelModelNames, channel.ID)
+		desired, ok := matchModelsForAutoGroup(model.AutoGroupTypeExact, group, channelModelNames, channel.ID, config.normalize)
 		if !ok {
 			continue
 		}
 		if aliasIdx != nil {
-			desired = mergeUniqueStrings(desired, modelsResolvedToPublic(channelModelNames, group.Name, aliasIdx))
+			desired = mergeUniqueStrings(desired, modelsResolvedToPublic(channelModelNames, group.Name, aliasIdx, config.normalize))
 		}
 		_ = reconcileGroupItemsForChannel(group, channel.ID, desired, ctx)
 	}
 	// Always create missing for one-shot (create-missing global switch is only
 	// checked in ChannelAutoGroupWithMode; ensureMissingExactGroups itself always creates).
-	_ = ensureMissingExactGroups(channel.ID, channelModelNames, groups, ctx)
+	_ = ensureMissingExactGroups(channel.ID, channelModelNames, groups, config.normalize, ctx)
 }

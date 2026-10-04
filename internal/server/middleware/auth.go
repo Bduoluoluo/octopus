@@ -6,12 +6,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/xuanli27/octopus/internal/apperror"
 	"github.com/xuanli27/octopus/internal/conf"
 	"github.com/xuanli27/octopus/internal/op"
 	"github.com/xuanli27/octopus/internal/server/auth"
 	"github.com/xuanli27/octopus/internal/server/resp"
-	"github.com/gin-gonic/gin"
 )
 
 func Auth() gin.HandlerFunc {
@@ -90,6 +90,7 @@ func APIKeyAuth() gin.HandlerFunc {
 		c.Set("supported_models", apiKeyObj.SupportedModels)
 		c.Set("model_list_mode", apiKeyObj.ModelListMode)
 		c.Set("api_key_id", apiKeyObj.ID)
+		c.Request = c.Request.WithContext(op.WithRouteGroup(c.Request.Context(), apiKeyObj.RouteGroupID))
 		c.Next()
 	}
 }

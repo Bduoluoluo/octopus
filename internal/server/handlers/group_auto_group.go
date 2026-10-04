@@ -2,13 +2,14 @@ package handlers
 
 import (
 	"net/http"
+	"strconv"
 
+	"github.com/gin-gonic/gin"
 	"github.com/xuanli27/octopus/internal/model"
 	"github.com/xuanli27/octopus/internal/op"
 	"github.com/xuanli27/octopus/internal/server/middleware"
 	"github.com/xuanli27/octopus/internal/server/resp"
 	"github.com/xuanli27/octopus/internal/server/router"
-	"github.com/gin-gonic/gin"
 )
 
 func init() {
@@ -21,7 +22,12 @@ func init() {
 }
 
 func getGroupAutoGroupConfig(c *gin.Context) {
-	config, err := op.GroupAutoGroupConfigGet(c.Request.Context())
+	routeGroupID, err := strconv.Atoi(c.DefaultQuery("route_group_id", "1"))
+	if err != nil || routeGroupID <= 0 {
+		resp.InvalidParam(c)
+		return
+	}
+	config, err := op.GroupAutoGroupConfigGet(op.WithRouteGroup(c.Request.Context(), routeGroupID))
 	if err != nil {
 		resp.Error(c, http.StatusInternalServerError, err.Error())
 		return
@@ -35,7 +41,8 @@ func updateGroupAutoGroupConfig(c *gin.Context) {
 		resp.InvalidJSON(c)
 		return
 	}
-	config, err := op.GroupAutoGroupConfigUpdate(&req, c.Request.Context())
+	ctx := op.WithRouteGroup(c.Request.Context(), req.RouteGroupID)
+	config, err := op.GroupAutoGroupConfigUpdate(&req, ctx)
 	if err != nil {
 		resp.ErrorWithAppError(c, http.StatusInternalServerError, err)
 		return
@@ -49,7 +56,8 @@ func runGroupAutoGroup(c *gin.Context) {
 		resp.InvalidJSON(c)
 		return
 	}
-	if err := op.RunGroupAutoGroup(req.ChannelIDs, c.Request.Context()); err != nil {
+	ctx := op.WithRouteGroup(c.Request.Context(), req.RouteGroupID)
+	if err := op.RunGroupAutoGroup(req.ChannelIDs, ctx); err != nil {
 		resp.ErrorWithAppError(c, http.StatusInternalServerError, err)
 		return
 	}

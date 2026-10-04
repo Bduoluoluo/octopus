@@ -1,4 +1,16 @@
 {
+  "routeGroup": {
+    "title": "路由分组",
+    "name": "分组名称",
+    "create": "新建分组",
+    "delete": "删除分组",
+    "cancel": "取消",
+    "hint": "同名模型可分别配置在不同分组中。API 密钥决定使用哪个分组。",
+    "keyHint": "此密钥只会使用所选分组中的路由模型。",
+    "deleteHint": "删除“{name}”及其中所有路由模型？已绑定 API 密钥时须先更换绑定。",
+    "createFailed": "创建路由分组失败",
+    "deleteFailed": "删除路由分组失败"
+  },
   "login": {
     "username": "用户名",
     "usernamePlaceholder": "请输入用户名",
@@ -648,10 +660,10 @@
       "loading": "加载中...",
       "emptyChannels": "暂无渠道",
       "matchMode": "匹配方式",
-      "notice": "关闭某渠道的自动分组或全局设置后，不会删除已存在的模型组成员；如需清理，请在具体模型组中手动移除。",
+      "notice": "所有自动分组配置仅作用于当前路由分组。关闭自动分组不会删除已有模型成员；如需清理，请手动移除。",
       "global": {
-        "title": "全局默认模式",
-        "description": "开启后，所有站点投影渠道会统一使用所选匹配方式；下方单独渠道设置会保留，并在全局关闭后生效。"
+        "title": "当前分组默认模式",
+        "description": "仅在当前路由分组内，所有站点投影渠道统一使用所选匹配方式。关闭后使用下方的单独渠道设置，不影响其他路由分组。"
       },
       "createMissing": {
         "title": "精确匹配时自动创建缺失分组",
@@ -672,7 +684,7 @@
         "noModels": "暂无模型",
         "unknownSite": "未知站点",
         "manualGroup": "普通渠道",
-        "followingGlobalTip": "全局已开启，此渠道当前按全局模式分组；下方单独模式将在全局关闭后生效。"
+        "followingGlobalTip": "此渠道使用当前路由分组的默认模式；关闭默认模式后，使用下方的单独模式。"
       },
       "bulk": {
         "selected": "已选 {count} 项",

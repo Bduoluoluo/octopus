@@ -11,10 +11,12 @@ import { useCreateGroup } from '@/api/endpoints/group';
 import { useTranslations } from 'next-intl';
 import { GroupEditor } from './Editor';
 import { toast } from '@/components/common/Toast';
+import { useRouteGroupSelection } from './route-group-store';
 
 export function CreateDialogContent() {
     const { setIsOpen } = useMorphingDialog();
     const createGroup = useCreateGroup();
+    const { activeID, data: routeGroups } = useRouteGroupSelection();
     const t = useTranslations('group');
 
     return (
@@ -23,6 +25,7 @@ export function CreateDialogContent() {
                 <header className="mb-5 flex items-center justify-between">
                     <h2 className="text-2xl font-bold text-card-foreground">
                         {t('create.title')}
+                        <span className="ml-2 text-sm font-normal text-muted-foreground">{routeGroups?.find((group) => group.id === activeID)?.name}</span>
                     </h2>
                     <MorphingDialogClose
                         className="relative right-0 top-0"
@@ -48,7 +51,7 @@ export function CreateDialogContent() {
                         }));
 
                         createGroup.mutate(
-                            { name, mode, match_regex: match_regex ?? '', first_token_time_out: first_token_time_out ?? 0, session_keep_time: session_keep_time ?? 0, retry_enabled, items },
+                            { route_group_id: activeID, name, mode, match_regex: match_regex ?? '', first_token_time_out: first_token_time_out ?? 0, session_keep_time: session_keep_time ?? 0, retry_enabled, items },
                             {
                                 onSuccess: () => setIsOpen(false),
                                 onError: (error) => toast.error(t('toast.createFailed'), { description: error.message }),

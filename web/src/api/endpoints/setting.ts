@@ -217,6 +217,7 @@ export function useExportDB() {
  * 导入数据库（上传 JSON 文件，增量导入）
  */
 export function useImportDB() {
+    const queryClient = useQueryClient();
     return useMutation({
         mutationFn: async (file: File) => {
             const form = new FormData();
@@ -242,6 +243,9 @@ export function useImportDB() {
             // 支持后端标准 ApiResponse：{code,message,data:{...}}
             const nested = getDataField<DBImportResult>(data);
             return nested ?? (data as DBImportResult);
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries();
         },
         onError: (error) => {
             logger.error('导入数据库失败:', error);

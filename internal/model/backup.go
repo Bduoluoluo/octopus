@@ -19,6 +19,8 @@ type DBDump struct {
 	SiteUserGroups      []SiteUserGroup      `json:"site_user_groups,omitempty"`
 	SiteModels          []SiteModel          `json:"site_models,omitempty"`
 	SiteChannelBindings []SiteChannelBinding `json:"site_channel_bindings,omitempty"`
+	RouteGroups         []RouteGroup         `json:"route_groups,omitempty"`
+	RouteGroupChannels  []RouteGroupChannel  `json:"route_group_channels,omitempty"`
 	Groups              []Group              `json:"groups,omitempty"`
 	GroupItems          []GroupItem          `json:"group_items,omitempty"`
 	LLMInfos            []LLMInfo            `json:"llm_infos,omitempty"`

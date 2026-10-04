@@ -30,6 +30,7 @@ import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/h
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/animate-ui/components/animate/tooltip';
 import { toast } from '@/components/common/Toast';
 import { cn } from '@/lib/utils';
+import { useRouteGroupSelection } from './route-group-store';
 
 const AUTO_GROUP_VALUES = [
     AutoGroupType.None,
@@ -235,9 +236,14 @@ function ChannelRow({
 }
 
 export function GroupAutoGroupDialogContent() {
+    const { activeID, data: routeGroups } = useRouteGroupSelection();
+    return <GroupAutoGroupForm key={activeID} routeGroupID={activeID} routeGroupName={routeGroups?.find((group) => group.id === activeID)?.name} />;
+}
+
+function GroupAutoGroupForm({ routeGroupID, routeGroupName }: { routeGroupID: number; routeGroupName?: string }) {
     const t = useTranslations('group.autoGroup');
     const { setIsOpen } = useMorphingDialog();
-    const { data: config, isLoading, error } = useGroupAutoGroupConfig();
+    const { data: config, isLoading, error } = useGroupAutoGroupConfig(routeGroupID);
     const updateConfig = useUpdateGroupAutoGroupConfig();
     const [keyword, setKeyword] = useState('');
     const [modes, setModes] = useState<Record<number, AutoGroupType>>({});
@@ -375,6 +381,7 @@ export function GroupAutoGroupDialogContent() {
         updateConfig.mutate(
             {
                 projected_global_auto_group: globalDirty ? projectedGlobalMode : undefined,
+                route_group_id: routeGroupID,
                 create_missing_groups: createMissingDirty ? createMissingGroups : undefined,
                 normalize_model_names: normalizeDirty ? normalizeModelNames : undefined,
                 items: dirtyItems,
@@ -397,6 +404,7 @@ export function GroupAutoGroupDialogContent() {
                     <h2 className="flex items-center gap-2 text-2xl font-bold text-card-foreground">
                         <WandSparkles className="size-5 text-primary" />
                         {t('title')}
+                        <span className="text-sm font-normal text-muted-foreground">{routeGroupName}</span>
                     </h2>
                     <MorphingDialogClose className="relative right-0 top-0" />
                 </header>

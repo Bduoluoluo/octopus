@@ -15,6 +15,7 @@ import {
     TabsContent,
 } from '@/components/animate-ui/components/animate/tabs';
 import { useGroupList } from '@/api/endpoints/group';
+import { DEFAULT_ROUTE_GROUP_ID } from '@/api/endpoints/route-group';
 import { CopyIconButton } from '@/components/common/CopyButton';
 import { cn } from '@/lib/utils';
 import type { APIKey } from '@/api/endpoints/apikey';
@@ -185,13 +186,15 @@ export function APIKeyExportOverlay({
     const [cherryApiType, setCherryApiType] = useState<CherryApiType>('openai');
 
     const modelOptions = useMemo(() => {
-        const all = Array.from(new Set(groups.map((g) => g.name).filter(Boolean)))
+        const all = Array.from(new Set(groups
+            .filter((group) => (group.route_group_id ?? DEFAULT_ROUTE_GROUP_ID) === (apiKey.route_group_id ?? DEFAULT_ROUTE_GROUP_ID))
+            .map((group) => group.name).filter(Boolean)))
             .sort((a, b) => a.localeCompare(b));
         const supported = apiKey.supported_models?.trim();
         if (!supported) return all;
         const allowed = new Set(supported.split(',').map((m) => m.trim()).filter(Boolean));
-        return all.filter((n) => allowed.has(n));
-    }, [groups, apiKey.supported_models]);
+        return all.filter((name) => apiKey.model_list_mode === 'deny' ? !allowed.has(name) : allowed.has(name));
+    }, [groups, apiKey.route_group_id, apiKey.supported_models, apiKey.model_list_mode]);
 
     // 名称默认跟随所选模型自动生成，用户手动输入后以输入为准，清空输入则恢复自动生成
     const autoName = model ? `octopus_${appType}_${model}` : '';

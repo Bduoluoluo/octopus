@@ -1,4 +1,16 @@
 {
+  "routeGroup": {
+    "title": "路由分組",
+    "name": "分組名稱",
+    "create": "新增分組",
+    "delete": "刪除分組",
+    "cancel": "取消",
+    "hint": "同名模型可分別配置在不同分組中。API 金鑰決定使用哪個分組。",
+    "keyHint": "此金鑰只會使用所選分組中的路由模型。",
+    "deleteHint": "刪除「{name}」及其中所有路由模型？已綁定 API 金鑰時須先更換綁定。",
+    "createFailed": "建立路由分組失敗",
+    "deleteFailed": "刪除路由分組失敗"
+  },
   "login": {
     "username": "使用者名稱",
     "usernamePlaceholder": "請輸入使用者名稱",
@@ -648,10 +660,10 @@
       "loading": "載入中...",
       "emptyChannels": "暫無供應源",
       "matchMode": "匹配方式",
-      "notice": "關閉某供應源的自動分組或全域設定後，不會刪除已存在的模型組成員；如需清理，請在具體模型組中手動移除。",
+      "notice": "所有自動分組設定僅作用於目前路由分組。關閉自動分組不會刪除既有模型成員；如需清理，請手動移除。",
       "global": {
-        "title": "全域預設模式",
-        "description": "啟用後，所有站點投影供應源會統一使用所選匹配方式；下方單獨供應源設定會保留，並在全域關閉後生效。"
+        "title": "目前分組預設模式",
+        "description": "僅在目前路由分組內，所有站點投影供應源統一使用所選匹配方式。關閉後使用下方的個別設定，不影響其他路由分組。"
       },
       "createMissing": {
         "title": "精確匹配時自動建立缺失分組",
@@ -672,7 +684,7 @@
         "noModels": "暫無模型",
         "unknownSite": "未知站點",
         "manualGroup": "普通供應源",
-        "followingGlobalTip": "全域已啟用，此供應源目前依全域模式分組；下方單獨模式將在全域關閉後生效。"
+        "followingGlobalTip": "此供應源使用目前路由分組的預設模式；關閉預設模式後，使用下方的個別模式。"
       },
       "bulk": {
         "selected": "已選 {count} 項",

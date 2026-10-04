@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dlclark/regexp2"
 	"github.com/xuanli27/octopus/internal/model"
 	"github.com/xuanli27/octopus/internal/utils/log"
-	"github.com/dlclark/regexp2"
 )
 
 func ProjectedChannelGlobalAutoGroupMode() model.AutoGroupType {
@@ -50,7 +50,16 @@ func ChannelAutoGroupWithMode(channel *model.Channel, autoGroup model.AutoGroupT
 	if channel == nil || autoGroup == model.AutoGroupTypeNone {
 		return
 	}
-	groups, err := GroupList(ctx)
+	config, err := loadRouteAutoGroupConfig(ctx)
+	if err != nil {
+		log.Warnf("load route auto group config failed: %v", err)
+		return
+	}
+	channelAutoGroupWithConfig(channel, autoGroup, config, ctx)
+}
+
+func channelAutoGroupWithConfig(channel *model.Channel, autoGroup model.AutoGroupType, config *routeAutoGroupConfig, ctx context.Context) {
+	groups, err := GroupListInRouteGroup(ctx)
 	if err != nil {
 		log.Warnf("get group list failed: %v", err)
 		return
@@ -69,31 +78,30 @@ func ChannelAutoGroupWithMode(channel *model.Channel, autoGroup model.AutoGroupT
 	}
 
 	for _, group := range groups {
-		desired, ok := matchModelsForAutoGroup(autoGroup, group, channelModelNames, channel.ID)
+		desired, ok := matchModelsForAutoGroup(autoGroup, group, channelModelNames, channel.ID, config.normalize)
 		if !ok {
 			continue
 		}
 		if autoGroup == model.AutoGroupTypeExact && aliasIdx != nil {
 			// Also attach models whose resolved public name equals this group name.
-			desired = mergeUniqueStrings(desired, modelsResolvedToPublic(channelModelNames, group.Name, aliasIdx))
+			desired = mergeUniqueStrings(desired, modelsResolvedToPublic(channelModelNames, group.Name, aliasIdx, config.normalize))
 		}
 		if err := reconcileGroupItemsForChannel(group, channel.ID, desired, ctx); err != nil {
 			log.Warnf("auto group reconcile failed (channel=%d group=%d): %v", channel.ID, group.ID, err)
 		}
 	}
 
-	if autoGroup == model.AutoGroupTypeExact && AutoGroupCreateMissingEnabled() {
-		if err := ensureMissingExactGroups(channel.ID, channelModelNames, groups, ctx); err != nil {
+	if autoGroup == model.AutoGroupTypeExact && config.createMissing {
+		if err := ensureMissingExactGroups(channel.ID, channelModelNames, groups, config.normalize, ctx); err != nil {
 			log.Warnf("auto group create-missing failed (channel=%d): %v", channel.ID, err)
 		}
 	}
 }
 
-func modelsResolvedToPublic(channelModelNames []string, publicName string, idx *publicAliasIndex) []string {
+func modelsResolvedToPublic(channelModelNames []string, publicName string, idx *publicAliasIndex, useNorm bool) []string {
 	if idx == nil || strings.TrimSpace(publicName) == "" {
 		return nil
 	}
-	useNorm := AutoGroupNormalizeEnabled()
 	out := make([]string, 0)
 	for _, up := range channelModelNames {
 		pub, via := ResolvePublicModelName(up, idx, useNorm)
@@ -159,11 +167,10 @@ func AutoGroupNormalizeEnabled() bool {
 // existing group match. With normalize enabled, the group name uses the
 // normalized public form (e.g. gpt-4o-2024-08-06 → gpt-4o) while the group
 // item keeps the original upstream model id.
-func ensureMissingExactGroups(channelID int, channelModelNames []string, existingGroups []model.Group, ctx context.Context) error {
+func ensureMissingExactGroups(channelID int, channelModelNames []string, existingGroups []model.Group, normalize bool, ctx context.Context) error {
 	if channelID <= 0 || len(channelModelNames) == 0 {
 		return nil
 	}
-	normalize := AutoGroupNormalizeEnabled()
 	aliasIdx, _ := loadPublicAliasIndex(ctx)
 
 	existingByLower := make(map[string]struct{}, len(existingGroups)*2)
@@ -283,11 +290,10 @@ func ensureMissingExactGroups(channelID int, channelModelNames []string, existin
 // matchModelsForAutoGroup returns channel models that should belong to group
 // under the given auto-group mode. ok=false means the rule could not be applied
 // (skip reconcile; do not wipe existing membership).
-func matchModelsForAutoGroup(autoGroup model.AutoGroupType, group model.Group, channelModelNames []string, channelID int) (matched []string, ok bool) {
+func matchModelsForAutoGroup(autoGroup model.AutoGroupType, group model.Group, channelModelNames []string, channelID int, normalize bool) (matched []string, ok bool) {
 	matchedModelNames := make([]string, 0)
 	switch autoGroup {
 	case model.AutoGroupTypeExact:
-		normalize := AutoGroupNormalizeEnabled()
 		for _, modelName := range channelModelNames {
 			if PublicModelNamesMatch(modelName, group.Name, normalize) {
 				matchedModelNames = append(matchedModelNames, modelName)
@@ -390,11 +396,35 @@ func ChannelAutoGroup(channel *model.Channel, ctx context.Context) {
 	if channel == nil {
 		return
 	}
-	ChannelAutoGroupWithMode(channel, channel.AutoGroup, ctx)
+	routeGroups, err := RouteGroupList(ctx)
+	if err != nil {
+		log.Warnf("list route groups for auto group failed: %v", err)
+		return
+	}
+	_, managed, err := ChannelManagedBinding(channel.ID, ctx)
+	if err != nil {
+		log.Warnf("load channel binding for auto group failed: %v", err)
+		return
+	}
+	for _, routeGroup := range routeGroups {
+		scopedCtx := WithRouteGroup(ctx, routeGroup.ID)
+		config, err := loadRouteAutoGroupConfig(scopedCtx)
+		if err != nil {
+			log.Warnf("load auto group config (route_group=%d) failed: %v", routeGroup.ID, err)
+			continue
+		}
+		if mode := config.effectiveMode(*channel, managed); mode != model.AutoGroupTypeNone {
+			channelAutoGroupWithConfig(channel, mode, config, scopedCtx)
+		}
+	}
 }
 
 func AutoGroupAllProjectedChannels(ctx context.Context) error {
-	mode := ProjectedChannelGlobalAutoGroupMode()
+	config, err := loadRouteAutoGroupConfig(ctx)
+	if err != nil {
+		return err
+	}
+	mode := config.projectedMode
 	if mode == model.AutoGroupTypeNone {
 		return nil
 	}
@@ -414,7 +444,7 @@ func AutoGroupAllProjectedChannels(ctx context.Context) error {
 		if _, ok := bindingMap[id]; !ok {
 			continue
 		}
-		ChannelAutoGroupWithMode(&channel, mode, ctx)
+		channelAutoGroupWithConfig(&channel, mode, config, ctx)
 	}
 	return nil
 }

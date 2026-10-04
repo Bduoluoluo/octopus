@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../client';
 import { logger } from '@/lib/logger';
 import { AutoGroupType } from './channel';
+import { DEFAULT_ROUTE_GROUP_ID } from './route-group';
 
 /**
  * 分组项信息
@@ -30,6 +31,7 @@ export enum GroupMode {
  */
 export interface Group {
     id?: number;
+    route_group_id?: number;
     name: string;
     mode: GroupMode;
     match_regex: string;
@@ -154,6 +156,7 @@ export interface GroupAutoGroupSourceUpdateRequest {
 }
 
 export interface GroupAutoGroupConfigUpdateRequest {
+    route_group_id?: number;
     projected_global_auto_group?: AutoGroupType;
     create_missing_groups?: boolean;
     normalize_model_names?: boolean;
@@ -162,6 +165,7 @@ export interface GroupAutoGroupConfigUpdateRequest {
 }
 
 export interface GroupAutoGroupRunRequest {
+    route_group_id?: number;
     channel_ids?: number[];
 }
 
@@ -342,10 +346,10 @@ export function useDeleteGroup() {
     });
 }
 
-export function useGroupAutoGroupConfig() {
+export function useGroupAutoGroupConfig(routeGroupID = DEFAULT_ROUTE_GROUP_ID) {
     return useQuery({
-        queryKey: ['groups', 'auto-group', 'config'],
-        queryFn: async () => apiClient.get<GroupAutoGroupConfig>('/api/v1/group/auto-group/config'),
+        queryKey: ['groups', 'auto-group', 'config', routeGroupID],
+        queryFn: async () => apiClient.get<GroupAutoGroupConfig>(`/api/v1/group/auto-group/config?route_group_id=${routeGroupID}`),
         refetchInterval: 30000,
     });
 }
@@ -368,9 +372,9 @@ export function useUpdateGroupAutoGroupConfig() {
     return useMutation({
         mutationFn: async (data: GroupAutoGroupConfigUpdateRequest) =>
             apiClient.put<GroupAutoGroupConfig>('/api/v1/group/auto-group/config', data),
-        onSuccess: (data) => {
+        onSuccess: (data, variables) => {
             logger.log('自动分组配置已更新:', data);
-            queryClient.setQueryData(['groups', 'auto-group', 'config'], data);
+            queryClient.setQueryData(['groups', 'auto-group', 'config', variables.route_group_id ?? DEFAULT_ROUTE_GROUP_ID], data);
             invalidateAutoGroupRelated(queryClient);
         },
         onError: (error) => {
@@ -549,4 +553,3 @@ export function useToggleGroupPin() {
         onError: (error) => logger.error('置顶切换失败:', error),
     });
 }
-

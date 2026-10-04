@@ -10,6 +10,7 @@ import { formatStatsMetrics, StatsAPIKey, StatsAPIKeyFormatted } from './stats';
 export interface APIKey {
     id: number;
     name: string;
+    route_group_id?: number;
     api_key: string;
     enabled: boolean;
     expire_at?: number; // Unix 时间戳（秒），不传表示永不过期

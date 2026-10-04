@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	dbDumpVersion = 1
+	dbDumpVersion = 2
 
 	// Keep import batches small enough for SQLite builds with low SQL variable limits.
 	// Some exported tables (for example relay_logs) have many columns, so a conservative
@@ -63,6 +63,12 @@ func DBExportAll(ctx context.Context, includeLogs, includeStats bool) (*model.DB
 	}
 	if err := conn.Find(&d.SiteChannelBindings).Error; err != nil {
 		return nil, fmt.Errorf("export site_channel_bindings: %w", err)
+	}
+	if err := conn.Find(&d.RouteGroups).Error; err != nil {
+		return nil, fmt.Errorf("export route_groups: %w", err)
+	}
+	if err := conn.Find(&d.RouteGroupChannels).Error; err != nil {
+		return nil, fmt.Errorf("export route_group_channels: %w", err)
 	}
 	if err := conn.Find(&d.Groups).Error; err != nil {
 		return nil, fmt.Errorf("export groups: %w", err)
@@ -142,12 +148,14 @@ func DBImportIncremental(ctx context.Context, dump *model.DBDump) (*model.DBImpo
 		return nil, fmt.Errorf("empty dump")
 	}
 
-	if dump.Version != 0 && dump.Version != dbDumpVersion {
+	if dump.Version < 0 || dump.Version > dbDumpVersion {
 		return nil, fmt.Errorf("unsupported dump version: %d", dump.Version)
 	}
 
 	conn := db.GetDB().WithContext(ctx)
 	res := &model.DBImportResult{RowsAffected: map[string]int64{}}
+	routeGroupMutationMu.Lock()
+	defer routeGroupMutationMu.Unlock()
 
 	err := conn.Transaction(func(tx *gorm.DB) error {
 		channelIDMap := make(map[int]int)
@@ -400,15 +408,74 @@ func DBImportIncremental(ctx context.Context, dump *model.DBDump) (*model.DBImpo
 			res.RowsAffected["site_channel_bindings"]++
 		}
 
-		// 10. Groups (dedup by name)
+		routeGroupIDMap := map[int]int{0: model.DefaultRouteGroupID, model.DefaultRouteGroupID: model.DefaultRouteGroupID}
+		for _, imported := range dump.RouteGroups {
+			oldID := imported.ID
+			imported.ID = 0
+			imported.Name = strings.TrimSpace(imported.Name)
+			if imported.Name == "" {
+				return fmt.Errorf("import route_groups: name is required")
+			}
+			if !imported.ProjectedAutoGroup.Valid() {
+				return fmt.Errorf("import route_groups: invalid auto group mode")
+			}
+			if imported.Name == "default" {
+				routeGroupIDMap[oldID] = model.DefaultRouteGroupID
+				continue
+			}
+			var existing model.RouteGroup
+			if err := tx.Where("name = ?", imported.Name).First(&existing).Error; err == nil {
+				routeGroupIDMap[oldID] = existing.ID
+				continue
+			} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+				return err
+			}
+			if err := tx.Create(&imported).Error; err != nil {
+				return fmt.Errorf("import route_groups: %w", err)
+			}
+			routeGroupIDMap[oldID] = imported.ID
+			res.RowsAffected["route_groups"]++
+		}
+		remapRouteGroup := func(id int) (int, error) {
+			if mapped, ok := routeGroupIDMap[id]; ok {
+				return mapped, nil
+			}
+			return 0, fmt.Errorf("import: route group %d is missing from backup", id)
+		}
+		for _, entry := range dump.RouteGroupChannels {
+			var err error
+			entry.RouteGroupID, err = remapRouteGroup(entry.RouteGroupID)
+			if err != nil {
+				return err
+			}
+			if !entry.AutoGroup.Valid() {
+				return fmt.Errorf("import route_group_channels: invalid auto group mode")
+			}
+			channelID, ok := channelIDMap[entry.ChannelID]
+			if !ok {
+				return fmt.Errorf("import route_group_channels: channel %d is missing from backup", entry.ChannelID)
+			}
+			entry.ChannelID = channelID
+			result := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&entry)
+			if result.Error != nil {
+				return fmt.Errorf("import route_group_channels: %w", result.Error)
+			}
+			res.RowsAffected["route_group_channels"] += result.RowsAffected
+		}
+
 		for i := range dump.Groups {
 			g := dump.Groups[i]
 			oldID := g.ID
 			g.ID = 0
 			g.Items = nil
+			var err error
+			g.RouteGroupID, err = remapRouteGroup(g.RouteGroupID)
+			if err != nil {
+				return err
+			}
 
 			var existing model.Group
-			if err := tx.Where("name = ?", g.Name).First(&existing).Error; err == nil {
+			if err := tx.Where("route_group_id = ? AND name = ?", g.RouteGroupID, g.Name).First(&existing).Error; err == nil {
 				groupIDMap[oldID] = existing.ID
 				continue
 			} else if !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -455,6 +522,11 @@ func DBImportIncremental(ctx context.Context, dump *model.DBDump) (*model.DBImpo
 			key := dump.APIKeys[i]
 			oldID := key.ID
 			key.ID = 0
+			var err error
+			key.RouteGroupID, err = remapRouteGroup(key.RouteGroupID)
+			if err != nil {
+				return err
+			}
 
 			var existing model.APIKey
 			if err := tx.Where("api_key = ?", key.APIKey).First(&existing).Error; err == nil {
@@ -812,6 +884,12 @@ func DBExportZip(ctx context.Context, w io.Writer, includeLogs, includeStats boo
 		return err
 	}
 	if err := writeZipTable(ctx, zw, conn, "site_channel_bindings.json", &[]model.SiteChannelBinding{}); err != nil {
+		return err
+	}
+	if err := writeZipTable(ctx, zw, conn, "route_groups.json", &[]model.RouteGroup{}); err != nil {
+		return err
+	}
+	if err := writeZipTable(ctx, zw, conn, "route_group_channels.json", &[]model.RouteGroupChannel{}); err != nil {
 		return err
 	}
 	if err := writeZipTable(ctx, zw, conn, "groups.json", &[]model.Group{}); err != nil {

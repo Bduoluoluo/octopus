@@ -492,6 +492,10 @@ func channelDel(id int, ctx context.Context, bypassManagedCheck bool) error {
 	}
 
 	// 删除渠道
+	if err := tx.Where("channel_id = ?", id).Delete(&model.RouteGroupChannel{}).Error; err != nil {
+		tx.Rollback()
+		return fmt.Errorf("failed to delete route group channel settings: %w", err)
+	}
 	if err := tx.Delete(&model.Channel{}, id).Error; err != nil {
 		tx.Rollback()
 		return fmt.Errorf("failed to delete channel: %w", err)

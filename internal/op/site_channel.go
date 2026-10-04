@@ -460,9 +460,7 @@ func UpdateSiteProjectedChannelSettings(siteID int, accountID int, req []model.S
 		if err != nil {
 			return err
 		}
-		if effective := EffectiveProjectedChannelAutoGroup(*channel); effective != model.AutoGroupTypeNone {
-			ChannelAutoGroupWithMode(channel, effective, ctx)
-		}
+		ChannelAutoGroup(channel, ctx)
 	}
 	return nil
 }

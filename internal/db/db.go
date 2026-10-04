@@ -77,6 +77,8 @@ func InitDB(dbType, dsn string, debug bool) error {
 		&model.SiteUserGroup{},
 		&model.SiteModel{},
 		&model.SiteChannelBinding{},
+		&model.RouteGroup{},
+		&model.RouteGroupChannel{},
 		&model.Group{},
 		&model.PublicModel{},
 		&model.PublicModelAlias{},

@@ -170,9 +170,7 @@ func ProjectAccount(ctx context.Context, accountID int) ([]int, error) {
 				bindingMap[bindingKey] = binding
 				bindingChannelByKey[bindingKey] = channelPayload.ID
 				managedChannelIDs = append(managedChannelIDs, channelPayload.ID)
-				if effective := op.EffectiveProjectedChannelAutoGroup(channelPayload); effective != model.AutoGroupTypeNone {
-					op.ChannelAutoGroupWithMode(&channelPayload, effective, ctx)
-				}
+				op.ChannelAutoGroup(&channelPayload, ctx)
 				continue
 			}
 
@@ -195,9 +193,7 @@ func ProjectAccount(ctx context.Context, accountID int) ([]int, error) {
 				}
 				bindingChannelByKey[bindingKey] = channelPayload.ID
 				managedChannelIDs = append(managedChannelIDs, channelPayload.ID)
-				if effective := op.EffectiveProjectedChannelAutoGroup(channelPayload); effective != model.AutoGroupTypeNone {
-					op.ChannelAutoGroupWithMode(&channelPayload, effective, ctx)
-				}
+				op.ChannelAutoGroup(&channelPayload, ctx)
 				continue
 			}
 
@@ -221,9 +217,7 @@ func ProjectAccount(ctx context.Context, accountID int) ([]int, error) {
 			if err != nil {
 				return nil, err
 			}
-			if effective := op.EffectiveProjectedChannelAutoGroup(*updatedChannel); effective != model.AutoGroupTypeNone {
-				op.ChannelAutoGroupWithMode(updatedChannel, effective, ctx)
-			}
+			op.ChannelAutoGroup(updatedChannel, ctx)
 		}
 	}
 

@@ -24,6 +24,8 @@ import {
     type APIKey,
 } from '@/api/endpoints/apikey';
 import { useGroupList } from '@/api/endpoints/group';
+import { DEFAULT_ROUTE_GROUP_ID, useRouteGroupList } from '@/api/endpoints/route-group';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useStatsAPIKey } from '@/api/endpoints/stats';
 import { useSettingValue, SettingKey } from '@/api/endpoints/setting';
 import { APIKeyExportOverlay } from './APIKeyExport';
@@ -84,10 +86,13 @@ interface APIKeyFormProps {
 
 function APIKeyForm({ apiKey, isPending, submitLabel, onSubmit, onClose }: APIKeyFormProps) {
     const t = useTranslations('setting');
+    const routeGroupText = useTranslations('routeGroup');
+    const { data: routeGroups } = useRouteGroupList();
     const { data: groups = [] } = useGroupList();
 
     const [form, setForm] = useState<Omit<APIKey, 'id' | 'api_key'>>(() => ({
         name: apiKey?.name ?? '',
+        route_group_id: apiKey?.route_group_id ?? DEFAULT_ROUTE_GROUP_ID,
         enabled: apiKey?.enabled ?? true,
         expire_at: apiKey?.expire_at,
         max_cost: apiKey?.max_cost,
@@ -113,9 +118,12 @@ function APIKeyForm({ apiKey, isPending, submitLabel, onSubmit, onClose }: APIKe
     const [expireOpen, setExpireOpen] = useState(false);
 
     const availableModels = useMemo(() => {
-        const names = groups.map((g) => g.name).filter(Boolean);
-        return Array.from(new Set(names)).sort((a, b) => a.localeCompare(b));
-    }, [groups]);
+        const names = groups
+            .filter((group) => (group.route_group_id ?? DEFAULT_ROUTE_GROUP_ID) === form.route_group_id)
+            .map((group) => group.name).filter(Boolean);
+        const selected = form.supported_models?.split(',').filter(Boolean) ?? [];
+        return Array.from(new Set([...names, ...selected])).sort((a, b) => a.localeCompare(b));
+    }, [groups, form.route_group_id, form.supported_models]);
 
     const expireDate = parseExpireDate(form.expire_at);
     const neverExpire = !form.expire_at;
@@ -205,6 +213,21 @@ function APIKeyForm({ apiKey, isPending, submitLabel, onSubmit, onClose }: APIKe
                     required
                 />
             </label>
+
+            <div className="grid gap-1 text-xs text-muted-foreground">
+                <span>{routeGroupText('title')}</span>
+                <Select value={String(form.route_group_id)} onValueChange={(value) => updateForm({ route_group_id: Number(value) })} disabled={isPending || !routeGroups}>
+                    <SelectTrigger className="h-9 rounded-xl" aria-label={routeGroupText('title')}>
+                        <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {(routeGroups ?? [{ id: DEFAULT_ROUTE_GROUP_ID, name: 'default' }]).map((group) => (
+                            <SelectItem key={group.id} value={String(group.id)}>{group.name}</SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+                <p>{routeGroupText('keyHint')}</p>
+            </div>
 
             <div className="grid gap-1 text-xs text-muted-foreground">
                 {t('apiKey.form.maxCost')}

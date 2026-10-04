@@ -13,7 +13,8 @@ const (
 
 type Group struct {
 	ID                int         `json:"id" gorm:"primaryKey"`
-	Name              string      `json:"name" gorm:"unique;not null"`
+	RouteGroupID      int         `json:"route_group_id" gorm:"not null;default:1;uniqueIndex:idx_group_route_name"`
+	Name              string      `json:"name" gorm:"size:255;not null;uniqueIndex:idx_group_route_name"`
 	Mode              GroupMode   `json:"mode" gorm:"not null"`
 	MatchRegex        string      `json:"match_regex"`
 	FirstTokenTimeOut int         `json:"first_token_time_out"`               // 单个渠道首个Token响应超时时间(秒)
@@ -152,6 +153,7 @@ type GroupAutoGroupSourceUpdateRequest struct {
 }
 
 type GroupAutoGroupConfigUpdateRequest struct {
+	RouteGroupID             int                                 `json:"route_group_id,omitempty"`
 	ProjectedGlobalAutoGroup *AutoGroupType                      `json:"projected_global_auto_group,omitempty"`
 	CreateMissingGroups      *bool                               `json:"create_missing_groups,omitempty"`
 	NormalizeModelNames      *bool                               `json:"normalize_model_names,omitempty"`
@@ -160,5 +162,6 @@ type GroupAutoGroupConfigUpdateRequest struct {
 }
 
 type GroupAutoGroupRunRequest struct {
-	ChannelIDs []int `json:"channel_ids,omitempty"`
+	RouteGroupID int   `json:"route_group_id,omitempty"`
+	ChannelIDs   []int `json:"channel_ids,omitempty"`
 }

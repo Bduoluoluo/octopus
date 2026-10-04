@@ -26,7 +26,9 @@ func GroupList(ctx context.Context) ([]model.Group, error) {
 func GroupListModel(ctx context.Context) ([]string, error) {
 	models := []string{}
 	for _, group := range groupCache.GetAll() {
-		models = append(models, group.Name)
+		if group.RouteGroupID == RouteGroupIDFromContext(ctx) {
+			models = append(models, group.Name)
+		}
 	}
 	return models, nil
 }
@@ -40,7 +42,7 @@ func GroupGet(id int, ctx context.Context) (*model.Group, error) {
 }
 
 func GroupGetEnabledMap(name string, ctx context.Context) (model.Group, error) {
-	group, ok := groupMap.Get(name)
+	group, ok := groupMap.Get(groupLookupKey(RouteGroupIDFromContext(ctx), name))
 	if !ok {
 		return model.Group{}, fmt.Errorf("group not found")
 	}
@@ -62,11 +64,19 @@ func GroupGetEnabledMap(name string, ctx context.Context) (model.Group, error) {
 }
 
 func GroupCreate(group *model.Group, ctx context.Context) error {
+	routeGroupMutationMu.Lock()
+	defer routeGroupMutationMu.Unlock()
+	if group.RouteGroupID == 0 {
+		group.RouteGroupID = RouteGroupIDFromContext(ctx)
+	}
+	if err := validateRouteGroup(db.GetDB().WithContext(ctx), group.RouteGroupID); err != nil {
+		return err
+	}
 	if err := db.GetDB().WithContext(ctx).Create(group).Error; err != nil {
 		return err
 	}
 	groupCache.Set(group.ID, *group)
-	groupMap.Set(group.Name, *group)
+	groupMap.Set(groupLookupKey(group.RouteGroupID, group.Name), *group)
 	return nil
 }
 
@@ -195,7 +205,7 @@ func GroupUpdate(req *model.GroupUpdateRequest, ctx context.Context) (*model.Gro
 
 	group, _ := groupCache.Get(req.ID)
 	if oldName != "" && oldName != group.Name {
-		groupMap.Del(oldName)
+		groupMap.Del(groupLookupKey(oldGroup.RouteGroupID, oldName))
 	}
 	resetBalancerStateForChannels(affectedChannelIDs...)
 	return &group, nil
@@ -263,7 +273,7 @@ func GroupDel(id int, ctx context.Context) error {
 	}
 
 	groupCache.Del(id)
-	groupMap.Del(group.Name)
+	groupMap.Del(groupLookupKey(group.RouteGroupID, group.Name))
 	for _, item := range group.Items {
 		resetBalancerStateForChannel(item.ChannelID)
 	}
@@ -486,7 +496,7 @@ func groupRefreshCache(ctx context.Context) error {
 	}
 	for _, group := range groups {
 		groupCache.Set(group.ID, group)
-		groupMap.Set(group.Name, group)
+		groupMap.Set(groupLookupKey(group.RouteGroupID, group.Name), group)
 	}
 	return nil
 }
@@ -499,7 +509,7 @@ func groupRefreshCacheByID(id int, ctx context.Context) error {
 		return err
 	}
 	groupCache.Set(group.ID, group)
-	groupMap.Set(group.Name, group)
+	groupMap.Set(groupLookupKey(group.RouteGroupID, group.Name), group)
 	return nil
 }
 
@@ -516,7 +526,7 @@ func groupRefreshCacheByIDs(ids []int, ctx context.Context) error {
 	}
 	for _, group := range groups {
 		groupCache.Set(group.ID, group)
-		groupMap.Set(group.Name, group)
+		groupMap.Set(groupLookupKey(group.RouteGroupID, group.Name), group)
 	}
 	return nil
 }

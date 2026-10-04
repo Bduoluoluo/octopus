@@ -1,5 +1,9 @@
 # Octopus
 
+Route groups allow the same public model name to use different upstream channels. Assign each API key to one route group in Settings. Existing routes and keys are migrated to the undeletable `default` group. Reassign any bound API keys before deleting a custom group, which also deletes its routes.
+
+Each route group has independent auto-group settings: channel matching, projected-channel defaults, missing model creation, and model name normalization. Legacy settings belong to `default`; other groups start with auto-group disabled. Channel sync applies each group's own rules.
+
 LLM API aggregation, protocol conversion, and load balancing.
 
 [简体中文](README_zh.md)

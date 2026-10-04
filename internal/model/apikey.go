@@ -3,13 +3,14 @@ package model
 import "strings"
 
 type APIKey struct {
-	ID              int     `json:"id" gorm:"primaryKey"`
-	Name            string  `json:"name" gorm:"not null"`
-	APIKey          string  `json:"api_key" gorm:"not null"`
-	Enabled         bool    `json:"enabled" gorm:"default:true"`
-	ExpireAt        int64   `json:"expire_at,omitempty"`
-	MaxCost         float64 `json:"max_cost,omitempty"`
-	MaxRPM          int     `json:"max_rpm,omitempty"`
+	ID           int     `json:"id" gorm:"primaryKey"`
+	Name         string  `json:"name" gorm:"not null"`
+	RouteGroupID int     `json:"route_group_id" gorm:"not null;default:1;index"`
+	APIKey       string  `json:"api_key" gorm:"not null"`
+	Enabled      bool    `json:"enabled" gorm:"default:true"`
+	ExpireAt     int64   `json:"expire_at,omitempty"`
+	MaxCost      float64 `json:"max_cost,omitempty"`
+	MaxRPM       int     `json:"max_rpm,omitempty"`
 	// SupportedModels is a comma-separated list. Semantics depend on ModelListMode:
 	//   allow (default): empty = all models; non-empty = whitelist
 	//   deny: empty = all models; non-empty = blacklist (issue #102)

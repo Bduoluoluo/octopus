@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/xuanli27/octopus/internal/db"
@@ -13,6 +12,10 @@ import (
 )
 
 func GroupAutoGroupConfigGet(ctx context.Context) (*model.GroupAutoGroupConfig, error) {
+	config, err := loadRouteAutoGroupConfig(ctx)
+	if err != nil {
+		return nil, err
+	}
 	channels, err := ChannelList(ctx)
 	if err != nil {
 		return nil, err
@@ -27,12 +30,12 @@ func GroupAutoGroupConfigGet(ctx context.Context) (*model.GroupAutoGroupConfig, 
 		return nil, err
 	}
 
-	globalMode := ProjectedChannelGlobalAutoGroupMode()
+	globalMode := config.projectedMode
 	sources := make([]model.GroupAutoGroupSource, 0, len(channels))
 	for _, channel := range channels {
 		models := splitChannelModelNames(channel.Model, channel.CustomModel)
 		binding, managed := bindingMap[channel.ID]
-		effective := channel.AutoGroup
+		effective := config.channelMode(channel)
 		globalOverride := managed && globalMode != model.AutoGroupTypeNone
 		if globalOverride {
 			effective = globalMode
@@ -43,7 +46,7 @@ func GroupAutoGroupConfigGet(ctx context.Context) (*model.GroupAutoGroupConfig, 
 			ChannelName:        channel.Name,
 			Enabled:            channel.Enabled,
 			Managed:            managed,
-			AutoGroup:          channel.AutoGroup,
+			AutoGroup:          config.channelMode(channel),
 			EffectiveAutoGroup: effective,
 			GlobalOverride:     globalOverride,
 			ModelCount:         len(models),
@@ -66,8 +69,8 @@ func GroupAutoGroupConfigGet(ctx context.Context) (*model.GroupAutoGroupConfig, 
 
 	return &model.GroupAutoGroupConfig{
 		ProjectedGlobalAutoGroup: globalMode,
-		CreateMissingGroups:      AutoGroupCreateMissingEnabled(),
-		NormalizeModelNames:      AutoGroupNormalizeEnabled(),
+		CreateMissingGroups:      config.createMissing,
+		NormalizeModelNames:      config.normalize,
 		Sources:                  sources,
 	}, nil
 }
@@ -75,6 +78,9 @@ func GroupAutoGroupConfigGet(ctx context.Context) (*model.GroupAutoGroupConfig, 
 func GroupAutoGroupConfigUpdate(req *model.GroupAutoGroupConfigUpdateRequest, ctx context.Context) (*model.GroupAutoGroupConfig, error) {
 	if req == nil {
 		return nil, newGroupAutoGroupBadRequestError("auto group config request is nil")
+	}
+	if err := validateRouteGroup(db.GetDB().WithContext(ctx), RouteGroupIDFromContext(ctx)); err != nil {
+		return nil, newGroupAutoGroupBadRequestError(err.Error())
 	}
 
 	if req.ProjectedGlobalAutoGroup != nil {
@@ -102,48 +108,16 @@ func GroupAutoGroupConfigUpdate(req *model.GroupAutoGroupConfigUpdateRequest, ct
 		}
 	}
 
-	if req.ProjectedGlobalAutoGroup != nil {
-		mode := *req.ProjectedGlobalAutoGroup
-		if err := SettingSetString(model.SettingKeyProjectedChannelAutoGroupEnabled, strconv.Itoa(int(mode))); err != nil {
-			return nil, err
-		}
-		// Preserve the old global-setting behavior: enabling a global projected-channel
-		// mode immediately applies auto grouping to existing projected channels.
-		if mode != model.AutoGroupTypeNone {
-			if err := AutoGroupAllProjectedChannels(ctx); err != nil {
-				return nil, err
-			}
-		}
-	}
-	if req.CreateMissingGroups != nil {
-		value := "false"
-		if *req.CreateMissingGroups {
-			value = "true"
-		}
-		if err := SettingSetString(model.SettingKeyAutoGroupCreateMissingEnabled, value); err != nil {
-			return nil, err
-		}
-	}
-	if req.NormalizeModelNames != nil {
-		value := "false"
-		if *req.NormalizeModelNames {
-			value = "true"
-		}
-		if err := SettingSetString(model.SettingKeyAutoGroupNormalizeEnabled, value); err != nil {
-			return nil, err
-		}
-	}
-	for _, item := range req.Items {
-		if item.AutoGroup == nil {
-			continue
-		}
-		if err := ChannelAutoGroupUpdate(item.ChannelID, *item.AutoGroup, ctx); err != nil {
-			return nil, err
-		}
+	if err := saveRouteAutoGroupConfig(req, ctx); err != nil {
+		return nil, err
 	}
 
 	if req.RunNow {
 		if err := RunGroupAutoGroup(nil, ctx); err != nil {
+			return nil, err
+		}
+	} else if req.ProjectedGlobalAutoGroup != nil && *req.ProjectedGlobalAutoGroup != model.AutoGroupTypeNone {
+		if err := AutoGroupAllProjectedChannels(ctx); err != nil {
 			return nil, err
 		}
 	}
@@ -151,23 +125,11 @@ func GroupAutoGroupConfigUpdate(req *model.GroupAutoGroupConfigUpdateRequest, ct
 	return GroupAutoGroupConfigGet(ctx)
 }
 
-func ChannelAutoGroupUpdate(channelID int, mode model.AutoGroupType, ctx context.Context) error {
-	if channelID <= 0 {
-		return newGroupAutoGroupBadRequestError("channel id is required")
-	}
-	if !mode.Valid() {
-		return newGroupAutoGroupBadRequestError("invalid auto group type")
-	}
-	if _, ok := channelCache.Get(channelID); !ok {
-		return newGroupAutoGroupNotFoundError("channel not found")
-	}
-	if err := db.GetDB().WithContext(ctx).Model(&model.Channel{}).Where("id = ?", channelID).Update("auto_group", mode).Error; err != nil {
-		return err
-	}
-	return channelRefreshCacheByID(channelID, ctx)
-}
-
 func RunGroupAutoGroup(channelIDs []int, ctx context.Context) error {
+	config, err := loadRouteAutoGroupConfig(ctx)
+	if err != nil {
+		return newGroupAutoGroupBadRequestError(err.Error())
+	}
 	allChannels := channelCache.GetAll()
 	if len(allChannels) == 0 {
 		return nil
@@ -199,18 +161,13 @@ func RunGroupAutoGroup(channelIDs []int, ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	globalMode := ProjectedChannelGlobalAutoGroupMode()
-
 	for id, channel := range targets {
 		_, managed := bindingMap[id]
-		mode := channel.AutoGroup
-		if managed && globalMode != model.AutoGroupTypeNone {
-			mode = globalMode
-		}
+		mode := config.effectiveMode(channel, managed)
 		if mode == model.AutoGroupTypeNone {
 			continue
 		}
-		ChannelAutoGroupWithMode(&channel, mode, ctx)
+		channelAutoGroupWithConfig(&channel, mode, config, ctx)
 	}
 	return nil
 }

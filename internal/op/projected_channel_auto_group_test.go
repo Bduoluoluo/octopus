@@ -197,23 +197,23 @@ func TestMatchModelsForAutoGroupModes(t *testing.T) {
 	group := model.Group{Name: "gpt-4o", MatchRegex: `^gpt-4o(-mini)?$`}
 	models := []string{"gpt-4o", "gpt-4o-mini", "gpt-4.1", "claude-3"}
 
-	exact, ok := matchModelsForAutoGroup(model.AutoGroupTypeExact, group, models, 1)
+	exact, ok := matchModelsForAutoGroup(model.AutoGroupTypeExact, group, models, 1, false)
 	if !ok || !hasAllModels(exact, "gpt-4o") || len(exact) != 1 {
 		t.Fatalf("exact: got %v ok=%v", exact, ok)
 	}
 
-	fuzzy, ok := matchModelsForAutoGroup(model.AutoGroupTypeFuzzy, group, models, 1)
+	fuzzy, ok := matchModelsForAutoGroup(model.AutoGroupTypeFuzzy, group, models, 1, false)
 	if !ok || !hasAllModels(fuzzy, "gpt-4o", "gpt-4o-mini") || len(fuzzy) != 2 {
 		t.Fatalf("fuzzy: got %v ok=%v", fuzzy, ok)
 	}
 
-	regex, ok := matchModelsForAutoGroup(model.AutoGroupTypeRegex, group, models, 1)
+	regex, ok := matchModelsForAutoGroup(model.AutoGroupTypeRegex, group, models, 1, false)
 	if !ok || !hasAllModels(regex, "gpt-4o", "gpt-4o-mini") || len(regex) != 2 {
 		t.Fatalf("regex: got %v ok=%v", regex, ok)
 	}
 
 	// Broken regex must not wipe membership (ok=false).
-	_, ok = matchModelsForAutoGroup(model.AutoGroupTypeRegex, model.Group{Name: "x", MatchRegex: "("}, models, 1)
+	_, ok = matchModelsForAutoGroup(model.AutoGroupTypeRegex, model.Group{Name: "x", MatchRegex: "("}, models, 1, false)
 	if ok {
 		t.Fatalf("invalid regex should return ok=false")
 	}
