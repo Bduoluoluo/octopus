@@ -756,6 +756,8 @@
     }
   },
   "log": {
+    "modelMismatch": "Model mismatch",
+    "modelMismatchHint": "Upstream requested: {requested}; upstream returned: {returned}; downstream returned: {downstream}",
     "list": {
       "noMore": "No more logs"
     },

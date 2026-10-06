@@ -206,6 +206,7 @@ func (ra *relayAttempt) handleWSPassthroughStream(ctx context.Context, pc *poole
 			continue
 		}
 		data = cacheRatio.rewriteJSON(data)
+		ra.observeResponseModel(data)
 		observeWSPassthroughEvent(stats, data)
 		if stats.Error != nil {
 			if !dropDownstream {
@@ -258,49 +259,10 @@ func writeWSPassthroughDownstream(ctx context.Context, writer StreamWriter, out 
 }
 
 func (ra *relayAttempt) rewriteWSPassthroughDownstreamModel(data []byte) []byte {
-	if ra == nil || ra.internalRequest == nil || strings.TrimSpace(ra.requestModel) == "" || strings.TrimSpace(ra.internalRequest.Model) == strings.TrimSpace(ra.requestModel) {
+	if ra == nil {
 		return data
 	}
-	var payload any
-	if err := json.Unmarshal(data, &payload); err != nil {
-		return data
-	}
-	if replaceModelInJSONValue(payload, ra.internalRequest.Model, ra.requestModel) {
-		if rewritten, err := json.Marshal(payload); err == nil {
-			return rewritten
-		}
-	}
-	return data
-}
-
-func replaceModelInJSONValue(value any, upstreamModel, downstreamModel string) bool {
-	switch v := value.(type) {
-	case map[string]any:
-		changed := false
-		for key, child := range v {
-			if key == "model" {
-				if s, ok := child.(string); ok && s == upstreamModel {
-					v[key] = downstreamModel
-					changed = true
-				}
-				continue
-			}
-			if replaceModelInJSONValue(child, upstreamModel, downstreamModel) {
-				changed = true
-			}
-		}
-		return changed
-	case []any:
-		changed := false
-		for _, child := range v {
-			if replaceModelInJSONValue(child, upstreamModel, downstreamModel) {
-				changed = true
-			}
-		}
-		return changed
-	default:
-		return false
-	}
+	return mapResponseModelJSON(data, ra.requestModel, nil)
 }
 
 func observeWSPassthroughEvent(stats *wsPassthroughStats, data []byte) {

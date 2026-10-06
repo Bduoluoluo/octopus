@@ -756,6 +756,8 @@
     }
   },
   "log": {
+    "modelMismatch": "模型不一致",
+    "modelMismatchHint": "上游請求：{requested}；上游回傳：{returned}；下游回傳：{downstream}",
     "list": {
       "noMore": "沒有更多日誌了"
     },

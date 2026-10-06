@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/xuanli27/octopus/internal/model"
 	"github.com/glebarez/sqlite"
+	"github.com/xuanli27/octopus/internal/model"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
@@ -20,7 +20,7 @@ type sqlCaptureLogger struct {
 	statements []string
 }
 
-func (l *sqlCaptureLogger) LogMode(logger.LogLevel) logger.Interface { return l }
+func (l *sqlCaptureLogger) LogMode(logger.LogLevel) logger.Interface      { return l }
 func (l *sqlCaptureLogger) Info(context.Context, string, ...interface{})  {}
 func (l *sqlCaptureLogger) Warn(context.Context, string, ...interface{})  {}
 func (l *sqlCaptureLogger) Error(context.Context, string, ...interface{}) {}
@@ -101,6 +101,11 @@ func TestEnsureRelayLogColumnsSQLite_AddsMissingWithoutRecreate(t *testing.T) {
 	}
 	if name != "success" {
 		t.Fatalf("success column not added by ensureRelayLogColumnsSQLite")
+	}
+	for _, field := range []string{"model_mismatch", "upstream_request_model", "upstream_response_model"} {
+		if !gormDB.Migrator().HasColumn(&model.RelayLog{}, field) {
+			t.Fatalf("missing response model column %s", field)
+		}
 	}
 
 	// 没发出过 recreateTable 特征 SQL。

@@ -381,7 +381,8 @@ func (ra *relayAttempt) handleResponsePassthrough(ctx context.Context, response 
 	if isEmptyUpstreamResponse(internalResponse) {
 		return ErrEmptyUpstreamResponse
 	}
-	ra.c.Data(http.StatusOK, contentType, body)
+	ra.observeResponseModel(body)
+	ra.c.Data(http.StatusOK, contentType, mapResponseModelJSON(body, ra.requestModel, nil))
 	ra.inAdapter.TransformResponse(ctx, internalResponse)
 	if cfg.CollectMetrics {
 		ra.collectResponse()

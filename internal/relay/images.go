@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/xuanli27/octopus/internal/conf"
 	"github.com/xuanli27/octopus/internal/helper"
 	"github.com/xuanli27/octopus/internal/model"
@@ -26,7 +27,6 @@ import (
 	"github.com/xuanli27/octopus/internal/server/resp"
 	"github.com/xuanli27/octopus/internal/transformer/outbound"
 	"github.com/xuanli27/octopus/internal/utils/log"
-	"github.com/gin-gonic/gin"
 )
 
 const imagesUpstreamErrorBodyLimit = 16 * 1024
@@ -241,6 +241,7 @@ type imagesUsage struct {
 }
 
 type imagesRelayMetrics struct {
+	responseModelTrace
 	APIKeyID     int
 	RequestModel string
 	ActualModel  string
@@ -345,16 +346,19 @@ func (m *imagesRelayMetrics) saveLog(ctx context.Context, success bool, err erro
 	}
 
 	relayLog := model.RelayLog{
-		Time:             m.StartTime.Unix(),
-		RequestModelName: m.RequestModel,
-		ChannelName:      channelName,
-		ChannelId:        channelID,
-		ActualModelName:  actualModel,
-		UseTime:          int(duration.Milliseconds()),
-		Attempts:         attempts,
-		TotalAttempts:    len(attempts),
-		RequestContent:   m.RequestContent,
-		ResponseContent:  m.ResponseContent,
+		Time:                  m.StartTime.Unix(),
+		RequestModelName:      m.RequestModel,
+		ChannelName:           channelName,
+		ChannelId:             channelID,
+		ActualModelName:       actualModel,
+		ModelMismatch:         m.ModelMismatch,
+		UpstreamRequestModel:  m.UpstreamRequestModel,
+		UpstreamResponseModel: m.UpstreamResponseModel,
+		UseTime:               int(duration.Milliseconds()),
+		Attempts:              attempts,
+		TotalAttempts:         len(attempts),
+		RequestContent:        m.RequestContent,
+		ResponseContent:       m.ResponseContent,
 	}
 
 	if apiKey, getErr := op.APIKeyGet(m.APIKeyID, ctx); getErr == nil {
@@ -537,6 +541,7 @@ func imagesAttempt(
 	actualModel string,
 	hb *earlyHeartbeat,
 ) (statusCode int, written bool, usage *imagesUsage, upstreamCT string, err error) {
+	metrics.responseModelTrace = responseModelTrace{UpstreamRequestModel: strings.TrimSpace(actualModel)}
 	// 构建 URL（baseUrl.Path 后追加 endpoint）
 	baseURL := channel.GetBaseUrl()
 	parsedURL, err := url.Parse(strings.TrimSuffix(baseURL, "/"))
@@ -628,7 +633,7 @@ func imagesAttempt(
 		return respUp.StatusCode, false, nil, upstreamCT, fmt.Errorf("upstream error: %d: %s", respUp.StatusCode, string(b))
 	}
 
-	u, w, err := proxyNonStream(c, respUp)
+	u, w, err := proxyNonStream(c, respUp, metrics)
 	return respUp.StatusCode, w, u, upstreamCT, err
 }
 
@@ -708,8 +713,8 @@ func copyMultipartReplaceModel(src io.Reader, boundary string, dst *multipart.Wr
 	return nil
 }
 
-// proxyNonStream 将上游非流式响应原样透传到下游，同时尽量提取 usage（避免解析巨大 b64_json）。
-func proxyNonStream(c *gin.Context, respUp *http.Response) (*imagesUsage, bool, error) {
+// proxyNonStream 流式改写顶层模型名并提取 usage，避免缓存完整图片响应。
+func proxyNonStream(c *gin.Context, respUp *http.Response, metrics *imagesRelayMetrics) (*imagesUsage, bool, error) {
 	ct := respUp.Header.Get("Content-Type")
 	if ct == "" {
 		ct = "application/json"
@@ -718,6 +723,7 @@ func proxyNonStream(c *gin.Context, respUp *http.Response) (*imagesUsage, bool, 
 	c.Status(respUp.StatusCode)
 
 	scanner := newUsageScanner()
+	writer := &responseModelWriter{destination: c.Writer, model: metrics.RequestModel, observe: metrics.observe}
 
 	buf := make([]byte, 32*1024)
 	for {
@@ -725,12 +731,15 @@ func proxyNonStream(c *gin.Context, respUp *http.Response) (*imagesUsage, bool, 
 		if n > 0 {
 			chunk := buf[:n]
 			scanner.Feed(chunk)
-			if _, werr := c.Writer.Write(chunk); werr != nil {
+			if _, werr := writer.Write(chunk); werr != nil {
 				return scanner.Usage(), true, werr
 			}
 		}
 		if rerr != nil {
 			if errors.Is(rerr, io.EOF) {
+				if err := writer.finish(); err != nil {
+					return scanner.Usage(), c.Writer.Written(), err
+				}
 				break
 			}
 			return scanner.Usage(), c.Writer.Written(), rerr
@@ -840,6 +849,12 @@ func proxySSE(ctx context.Context, c *gin.Context, respUp *http.Response, firstT
 			} else if bytes.HasPrefix(trimmed, []byte("data:")) {
 				// 仅在 completed 事件上尝试提取 usage（避免解析/分配巨大 b64_json）
 				payload := bytes.TrimSpace(trimmed[len("data:"):])
+				var rewritten bytes.Buffer
+				modelWriter := &responseModelWriter{destination: &rewritten, model: metrics.RequestModel, observe: metrics.observe}
+				_, _ = modelWriter.Write(payload)
+				_ = modelWriter.finish()
+				line = append([]byte("data: "), rewritten.Bytes()...)
+				line = append(line, '\n')
 				if currentEvent == "image_generation.completed" || bytes.Contains(payload, []byte(`"type":"image_generation.completed"`)) {
 					completedScanner.Feed(payload)
 				}

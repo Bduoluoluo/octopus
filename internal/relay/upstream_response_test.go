@@ -367,9 +367,7 @@ func TestUpstreamBufferedUsagePreservesSuccessfulStream(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if recorder.Body.String() != body {
-				t.Fatalf("successful SSE changed: %q", recorder.Body.String())
-			}
+			assertEquivalentResponseSSE(t, recorder.Body.String(), strings.ReplaceAll(body, `"model":"test-model"`, `"model":"`+attempt.requestModel+`"`))
 			if attempt.metrics.Stats.InputToken != 3 || attempt.metrics.Stats.OutputToken != 2 {
 				t.Fatalf("usage lost: %+v", attempt.metrics.Stats)
 			}

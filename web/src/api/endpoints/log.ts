@@ -58,6 +58,9 @@ export interface RelayLog {
     id: number;
     time: number;                // 时间戳
     request_model_name: string;  // 请求模型名称
+    model_mismatch?: boolean;
+    upstream_request_model?: string;
+    upstream_response_model?: string;
     request_api_key_name?: string; // 请求使用的 API Key 名称
     client_ip?: string;          // 调用方 IP
     channel: number;             // 实际使用的渠道ID

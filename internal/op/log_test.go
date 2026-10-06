@@ -67,6 +67,9 @@ func TestRelayLogListDefaultsToLightFieldsAndNoContentKeyword(t *testing.T) {
 		{ID: 101, Time: 101, RequestModelName: "gpt-visible", RequestAPIKeyName: "key-a", ChannelId: 1, ChannelName: "primary", ActualModelName: "gpt-visible", RequestContent: "hidden-needle", ResponseContent: "hidden-response", Success: true},
 		{ID: 102, Time: 102, RequestModelName: "claude", RequestAPIKeyName: "key-b", ChannelId: 1, ChannelName: "secondary", ActualModelName: "claude", Error: "visible failure", RequestContent: "plain", Success: false},
 	}
+	rows[0].ModelMismatch = true
+	rows[0].UpstreamRequestModel = "upstream-requested"
+	rows[0].UpstreamResponseModel = "upstream-returned"
 	if err := dbpkg.GetDB().WithContext(ctx).Create(&rows).Error; err != nil {
 		t.Fatalf("create relay logs failed: %v", err)
 	}
@@ -79,6 +82,9 @@ func TestRelayLogListDefaultsToLightFieldsAndNoContentKeyword(t *testing.T) {
 		t.Fatalf("unexpected list result: %+v", result)
 	}
 	for _, item := range result.Logs {
+		if item.ID == 101 && (!item.ModelMismatch || item.UpstreamRequestModel != "upstream-requested" || item.UpstreamResponseModel != "upstream-returned") {
+			t.Fatalf("lightweight list omitted model mismatch: %+v", item)
+		}
 		if item.RequestContent != "" || item.ResponseContent != "" {
 			t.Fatalf("expected list to omit content fields by default, got %+v", item)
 		}

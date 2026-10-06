@@ -17,6 +17,7 @@ import (
 
 // RelayMetrics 负责最终的日志收集与持久化
 type RelayMetrics struct {
+	responseModelTrace
 	APIKeyID     int
 	RequestModel string
 	ClientIP     string
@@ -67,6 +68,13 @@ func (m *RelayMetrics) SetFirstTokenTime(t time.Time) {
 }
 
 func (m *RelayMetrics) SetTransportRequestPayload(payload []byte, modelName string) {
+	m.UpstreamRequestModel = strings.TrimSpace(modelName)
+	var request struct {
+		Model string `json:"model"`
+	}
+	if json.Unmarshal(payload, &request) == nil && strings.TrimSpace(request.Model) != "" {
+		m.UpstreamRequestModel = strings.TrimSpace(request.Model)
+	}
 	if len(payload) == 0 {
 		return
 	}
@@ -254,16 +262,19 @@ func (m *RelayMetrics) saveLog(ctx context.Context, success bool, err error, dur
 	}
 
 	relayLog := model.RelayLog{
-		Time:             m.StartTime.Unix(),
-		RequestModelName: m.RequestModel,
-		ClientIP:         m.ClientIP,
-		ChannelName:      channelName,
-		ChannelId:        channelID,
-		ActualModelName:  actualModel,
-		UseTime:          int(duration.Milliseconds()),
-		Attempts:         attempts,
-		TotalAttempts:    len(attempts),
-		UsedWS:           m.UsedWS,
+		Time:                  m.StartTime.Unix(),
+		RequestModelName:      m.RequestModel,
+		ClientIP:              m.ClientIP,
+		ChannelName:           channelName,
+		ChannelId:             channelID,
+		ActualModelName:       actualModel,
+		ModelMismatch:         m.ModelMismatch,
+		UpstreamRequestModel:  m.UpstreamRequestModel,
+		UpstreamResponseModel: m.UpstreamResponseModel,
+		UseTime:               int(duration.Milliseconds()),
+		Attempts:              attempts,
+		TotalAttempts:         len(attempts),
+		UsedWS:                m.UsedWS,
 	}
 
 	if apiKey, getErr := op.APIKeyGet(m.APIKeyID, ctx); getErr == nil {

@@ -9,13 +9,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/coder/websocket"
+	"github.com/gin-gonic/gin"
 	"github.com/xuanli27/octopus/internal/model"
 	"github.com/xuanli27/octopus/internal/op"
 	"github.com/xuanli27/octopus/internal/transformer/inbound"
 	transformerModel "github.com/xuanli27/octopus/internal/transformer/model"
 	"github.com/xuanli27/octopus/internal/transformer/outbound"
-	"github.com/coder/websocket"
-	"github.com/gin-gonic/gin"
 )
 
 func TestForwardViaWSPassthroughNormalizesPayloadAndRecordsMetrics(t *testing.T) {
@@ -46,9 +46,9 @@ func TestForwardViaWSPassthroughNormalizesPayloadAndRecordsMetrics(t *testing.T)
 		if err := json.Unmarshal(data, &payload); err == nil {
 			payloadCh <- payload
 		}
-		_ = conn.Write(r.Context(), websocket.MessageText, []byte(`{"type":"response.created","response":{"id":"resp_passthrough","model":"gpt-4o"}}`))
-		_ = conn.Write(r.Context(), websocket.MessageText, []byte(`{"type":"response.output_text.delta","response":{"id":"resp_passthrough","model":"gpt-4o"},"delta":"ok"}`))
-		_ = conn.Write(r.Context(), websocket.MessageText, []byte(`{"type":"response.completed","response":{"id":"resp_passthrough","model":"gpt-4o","status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"ok"}]}],"usage":{"input_tokens":3,"input_tokens_details":{"cached_tokens":1},"output_tokens":2,"output_tokens_details":{"reasoning_tokens":1},"total_tokens":5}}}`))
+		_ = conn.Write(r.Context(), websocket.MessageText, []byte(`{"type":"response.created","response":{"id":"resp_passthrough","model":"returned-model"}}`))
+		_ = conn.Write(r.Context(), websocket.MessageText, []byte(`{"type":"response.output_text.delta","response":{"id":"resp_passthrough","model":"returned-model"},"delta":"ok"}`))
+		_ = conn.Write(r.Context(), websocket.MessageText, []byte(`{"type":"response.completed","response":{"id":"resp_passthrough","model":"returned-model","status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"ok"}]}],"usage":{"input_tokens":3,"input_tokens_details":{"cached_tokens":1},"output_tokens":2,"output_tokens_details":{"reasoning_tokens":1},"total_tokens":5}}}`))
 	}))
 	defer wsServer.Close()
 
@@ -111,7 +111,7 @@ func TestForwardViaWSPassthroughNormalizesPayloadAndRecordsMetrics(t *testing.T)
 		if err != nil {
 			t.Fatalf("client read downstream event %d failed: %v", i, err)
 		}
-		if strings.Contains(string(data), "gpt-4o") {
+		if strings.Contains(string(data), "gpt-4o") || strings.Contains(string(data), "returned-model") {
 			t.Fatalf("expected downstream model replacement, got %s", data)
 		}
 		if strings.Contains(string(data), "client-model") {
@@ -120,6 +120,9 @@ func TestForwardViaWSPassthroughNormalizesPayloadAndRecordsMetrics(t *testing.T)
 	}
 	if len(downstreamModels) == 0 {
 		t.Fatalf("expected at least one downstream model replacement")
+	}
+	if !req.metrics.ModelMismatch || req.metrics.UpstreamRequestModel != "gpt-4o" || req.metrics.UpstreamResponseModel != "returned-model" || req.metrics.ActualModel != "returned-model" {
+		t.Fatalf("upstream mismatch not captured: %+v", req.metrics)
 	}
 	if req.metrics.WSExecMode == nil || *req.metrics.WSExecMode != model.RelayLogWSExecModePassthrough {
 		t.Fatalf("expected passthrough ws exec mode, got %#v", req.metrics.WSExecMode)

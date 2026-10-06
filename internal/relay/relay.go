@@ -370,6 +370,7 @@ func circuitFailureKind(retryEnabled bool, statusCode int) balancer.FailureKind 
 
 // attempt 统一管理一次通道尝试的完整生命周期
 func (ra *relayAttempt) attempt() attemptResult {
+	ra.metrics.responseModelTrace = responseModelTrace{UpstreamRequestModel: strings.TrimSpace(ra.internalRequest.Model)}
 	ra.metrics.UpstreamFailed = false
 	span := ra.iter.StartAttempt(ra.channel.ID, ra.usedKey.ID, ra.channel.Name)
 

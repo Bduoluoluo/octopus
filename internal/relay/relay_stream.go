@@ -114,8 +114,10 @@ func (ra *relayAttempt) handleStreamResponsePassthroughV2(ctx context.Context, r
 
 	// Create StreamProcessor
 	processor := stream.NewStreamProcessor(stream.StreamConfig{
-		Source:            withCacheRatio(stream.NewFramedSSESource(response.Body, maxSSEEventSize), ra.channel, true),
-		Transform:         guardedStreamTransform(nil, true),
+		Source: withCacheRatio(stream.NewFramedSSESource(response.Body, maxSSEEventSize), ra.channel, true),
+		Transform: guardedStreamTransform(func(ctx context.Context, data []byte) ([]byte, error) {
+			return mapResponseModelSSE(data, ra.requestModel, ra.observeResponseModelName), nil
+		}, true),
 		Writer:            ra.getStreamWriter(),
 		Context:           ctx,
 		FirstTokenTimeout: firstTokenTimeout,
@@ -216,6 +218,7 @@ func (ra *relayAttempt) collectPassthroughMetrics(ctx context.Context, rawStream
 
 // transformStreamData 转换流式数据
 func (ra *relayAttempt) transformStreamData(ctx context.Context, data string) ([]byte, error) {
+	ra.observeResponseModel([]byte(data))
 	if err := upstreamPayloadError([]byte(data), ""); err != nil {
 		return nil, err
 	}
@@ -276,7 +279,7 @@ func (ra *relayAttempt) encodeInboundStreamEvents(ctx context.Context, events []
 		log.Warnf("failed to transform inbound stream events: %v", err)
 		return nil, err
 	}
-	return inStream, nil
+	return mapResponseModelSSE(inStream, ra.requestModel, nil), nil
 }
 
 func (ra *relayAttempt) decodeOutboundStreamResponse(ctx context.Context, data []byte) (*model.InternalLLMResponse, error) {
@@ -292,7 +295,7 @@ func (ra *relayAttempt) encodeInboundStreamResponse(ctx context.Context, interna
 		log.Warnf("failed to transform stream: %v", err)
 		return nil, err
 	}
-	return inStream, nil
+	return mapResponseModelSSE(inStream, ra.requestModel, nil), nil
 }
 
 // handleResponse 处理非流式响应
@@ -304,6 +307,7 @@ func (ra *relayAttempt) handleResponse(ctx context.Context, response *http.Respo
 	if err := upstreamPayloadError(body, ""); err != nil {
 		return err
 	}
+	ra.observeResponseModel(body)
 	body = newCacheRatioOverride(ra.channel).rewriteJSON(body)
 	response.Body = io.NopCloser(bytes.NewReader(body))
 	internalResponse, err := ra.outAdapter.TransformResponse(ctx, response)
@@ -329,7 +333,7 @@ func (ra *relayAttempt) handleResponse(ctx context.Context, response *http.Respo
 		return fmt.Errorf("failed to transform inbound response: %w", err)
 	}
 
-	ra.c.Data(http.StatusOK, "application/json", inResponse)
+	ra.c.Data(http.StatusOK, "application/json", mapResponseModelJSON(inResponse, ra.requestModel, nil))
 	return nil
 }
 

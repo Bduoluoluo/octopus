@@ -164,6 +164,7 @@ func relayLogApproxBytes(relayLog model.RelayLog) int64 {
 	size := 256
 	size += len(relayLog.RequestModelName) + len(relayLog.RequestAPIKeyName) + len(relayLog.ChannelName) + len(relayLog.ActualModelName)
 	size += len(relayLog.RequestContent) + len(relayLog.ResponseContent) + len(relayLog.Error)
+	size += len(relayLog.UpstreamRequestModel) + len(relayLog.UpstreamResponseModel)
 	for _, attempt := range relayLog.Attempts {
 		size += 96 + len(attempt.ChannelName) + len(attempt.ModelName) + len(attempt.Msg)
 	}
@@ -750,6 +751,9 @@ func selectRelayLogListFields(query *gorm.DB, includeContent bool) *gorm.DB {
 		"id",
 		"time",
 		"request_model_name",
+		"model_mismatch",
+		"upstream_request_model",
+		"upstream_response_model",
 		"request_api_key_name",
 		"channel_id",
 		"channel_name",

@@ -40,6 +40,25 @@ import { useUpdateSiteChannelModelDisabled } from '@/api/endpoints/site-channel'
 export type LogSiteActionTarget = ApiLogSiteActionTarget;
 export type LogSiteActionTargets = ApiLogSiteActionTargets;
 
+function ModelMismatchBadge({ log }: { log: RelayLog }) {
+    const t = useTranslations('log');
+    if (!log.model_mismatch) return null;
+    return (
+        <TooltipProvider>
+            <Tooltip>
+                <TooltipTrigger asChild>
+                    <Badge variant="outline" className="shrink-0 border-amber-500/40 bg-amber-500/10 px-1.5 text-[10px] text-amber-600 dark:text-amber-400">
+                        {t('modelMismatch')}
+                    </Badge>
+                </TooltipTrigger>
+                <TooltipContent>
+                    {t('modelMismatchHint', { requested: log.upstream_request_model ?? '', returned: log.upstream_response_model ?? '', downstream: log.request_model_name })}
+                </TooltipContent>
+            </Tooltip>
+        </TooltipProvider>
+    );
+}
+
 function formatTime(timestamp: number): string {
     const date = new Date(timestamp * 1000);
     return date.toLocaleString('zh-CN', {
@@ -575,6 +594,7 @@ function buildLogDiagnosticReport(log: RelayLog): string {
     lines.push(`# Octopus log #${log.id}`);
     lines.push(`time: ${new Date((log.time || 0) * 1000).toISOString()}`);
     lines.push(`model: ${log.request_model_name} -> ${log.actual_model_name || '-'}`);
+    if (log.model_mismatch) lines.push(`model mismatch: ${log.upstream_request_model} -> ${log.upstream_response_model}`);
     lines.push(`channel: ${log.channel_name || log.channel} (#${log.channel})`);
     if (log.request_api_key_name) lines.push(`api_key: ${log.request_api_key_name}`);
     if (log.client_ip) lines.push(`client_ip: ${log.client_ip}`);
@@ -737,6 +757,7 @@ export function LogCard({ log, siteTargets }: { log: RelayLog; siteTargets: LogS
                                     <span className="font-semibold text-card-foreground truncate" title={log.request_model_name}>
                                         {log.request_model_name}
                                     </span>
+                                    <ModelMismatchBadge log={log} />
                                     <ArrowRight className="size-3.5 shrink-0 text-muted-foreground/50" />
                                     {hasMultipleAttempts ? (
                                         <RetryBadgeWithTooltip
@@ -829,6 +850,7 @@ export function LogCard({ log, siteTargets }: { log: RelayLog; siteTargets: LogS
                             <div className="flex min-w-0 flex-1 items-center gap-2">
                                 <ModelAvatar size={28} />
                                 <span className="font-semibold text-card-foreground truncate">{log.request_model_name}</span>
+                                <ModelMismatchBadge log={log} />
                                 <ArrowRight className="size-3.5 shrink-0 text-muted-foreground/50" />
                                 {hasMultipleAttempts ? (
                                     <RetryBadgeWithTooltip

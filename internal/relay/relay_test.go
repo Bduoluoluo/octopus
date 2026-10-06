@@ -494,9 +494,7 @@ func TestHandlerPassthroughsOpenAIResponsesSameProtocolStream(t *testing.T) {
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("expected request to succeed, got status %d body %s", recorder.Code, recorder.Body.String())
 	}
-	if got := recorder.Body.String(); got != rawSSE {
-		t.Fatalf("expected raw SSE to be preserved exactly, got %q want %q", got, rawSSE)
-	}
+	assertEquivalentResponseSSE(t, recorder.Body.String(), strings.ReplaceAll(rawSSE, `"model":"gpt-4o"`, `"model":"`+group.Name+`"`))
 	var payload map[string]any
 	if err := json.Unmarshal(capturedBody, &payload); err != nil {
 		t.Fatalf("unmarshal upstream request failed: %v", err)
@@ -551,9 +549,7 @@ func TestHandlerPassthroughsOpenAIResponsesSameProtocolNonStream(t *testing.T) {
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("expected request to succeed, got status %d body %s", recorder.Code, recorder.Body.String())
 	}
-	if got := recorder.Body.String(); got != rawResponse {
-		t.Fatalf("expected raw JSON to be preserved exactly, got %q want %q", got, rawResponse)
-	}
+	assertEquivalentResponseJSON(t, recorder.Body.String(), strings.ReplaceAll(rawResponse, `"model":"gpt-4o"`, `"model":"`+group.Name+`"`))
 }
 
 func TestHandlerPassthroughsOpenAIResponsesRawTools(t *testing.T) {

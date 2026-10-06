@@ -220,6 +220,7 @@ func supportsResponsesCompact(channelType outbound.OutboundType) bool {
 }
 
 func forwardResponsesCompact(c *gin.Context, metrics *RelayMetrics, iter *balancer.Iterator, channel *dbmodel.Channel, usedKey dbmodel.ChannelKey, requestBody []byte) (int, time.Duration, error) {
+	metrics.responseModelTrace = responseModelTrace{}
 	span := iter.StartAttempt(channel.ID, usedKey.ID, channel.Name)
 	request, err := buildResponsesCompactRequest(c.Request.Context(), channel, usedKey.ChannelKey, requestBody)
 	if err != nil {
@@ -255,7 +256,9 @@ func forwardResponsesCompact(c *gin.Context, metrics *RelayMetrics, iter *balanc
 		contentType = "application/json"
 	}
 	body = newCacheRatioOverride(channel).rewriteJSON(body)
-	c.Data(response.StatusCode, contentType, body)
+	mapResponseModelJSON(body, "", metrics.observe)
+	c.Writer.Header().Del("Content-Length")
+	c.Data(response.StatusCode, contentType, mapResponseModelJSON(body, metrics.RequestModel, nil))
 
 	var compactResp responsesCompactResponse
 	if err := json.Unmarshal(body, &compactResp); err == nil {
