@@ -58,18 +58,33 @@ func TestBuildTestRequestProtocols(t *testing.T) {
 }
 
 func TestTestChannelModelHeadersAndError(t *testing.T) {
+	suffix := "\nprobe suffix\n"
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.Header.Get("Authorization") != "Bearer override" || request.Header.Get("X-Test") != "custom" {
 			t.Errorf("custom headers not applied: %v", request.Header)
+		}
+		var payload struct {
+			Input []struct {
+				Content []struct {
+					Type string `json:"type"`
+					Text string `json:"text"`
+				} `json:"content"`
+			} `json:"input"`
+		}
+		if err := json.NewDecoder(request.Body).Decode(&payload); err != nil || len(payload.Input) != 1 || len(payload.Input[0].Content) != 2 {
+			t.Errorf("invalid model probe payload: %+v, %v", payload, err)
+		} else if payload.Input[0].Content[0].Text != "hi" || payload.Input[0].Content[1].Text != suffix || payload.Input[0].Content[1].Type != "input_text" {
+			t.Errorf("model test suffix missing or malformed: %+v", payload)
 		}
 		writer.WriteHeader(http.StatusUnauthorized)
 		_, _ = writer.Write([]byte(`{"error":{"message":"invalid test key"}}`))
 	}))
 	defer server.Close()
 	channel := &model.Channel{
-		Type:     outbound.OutboundTypeOpenAIChat,
-		BaseUrls: []model.BaseUrl{{URL: server.URL + "/v1"}},
-		Keys:     []model.ChannelKey{{ChannelKey: "test-key"}},
+		Type:         outbound.OutboundTypeOpenAIChat,
+		PromptSuffix: &suffix,
+		BaseUrls:     []model.BaseUrl{{URL: server.URL + "/v1"}},
+		Keys:         []model.ChannelKey{{ChannelKey: "test-key"}},
 		CustomHeader: []model.CustomHeader{
 			{HeaderKey: "Authorization", HeaderValue: "Bearer override"},
 			{HeaderKey: "X-Test", HeaderValue: "custom"},

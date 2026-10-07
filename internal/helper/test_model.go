@@ -81,6 +81,11 @@ func TestChannelModel(
 	if err != nil {
 		return nil, err
 	}
+	if channel.PromptSuffix != nil {
+		if err := ApplyPromptSuffix(req, channel.Type, *channel.PromptSuffix); err != nil {
+			return nil, err
+		}
+	}
 	// 自定义请求头优先于默认值，与渠道配置保持一致。
 	for _, header := range channel.CustomHeader {
 		if name := strings.TrimSpace(header.HeaderKey); name != "" {

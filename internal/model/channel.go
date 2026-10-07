@@ -80,6 +80,7 @@ type Channel struct {
 	CustomHeader      []CustomHeader        `json:"custom_header" gorm:"serializer:json"`
 	WSMode            ChannelWSMode         `json:"ws_mode" gorm:"type:varchar(16);not null;default:'inherit'"`
 	ParamOverride     *string               `json:"param_override"`
+	PromptSuffix      *string               `json:"prompt_suffix"`
 	ChannelProxy      *string               `json:"-" gorm:"column:channel_proxy"`
 	Stats             *StatsChannel         `json:"stats,omitempty" gorm:"foreignKey:ChannelID"`
 	MatchRegex        *string               `json:"match_regex"`
@@ -161,6 +162,7 @@ type ChannelUpdateRequest struct {
 	WSMode            *ChannelWSMode         `json:"ws_mode,omitempty"`
 	ChannelProxy      *string                `json:"-"`
 	ParamOverride     *string                `json:"param_override,omitempty"`
+	PromptSuffix      *string                `json:"prompt_suffix,omitempty"`
 	MatchRegex        *string                `json:"match_regex,omitempty"`
 
 	KeysToAdd    []ChannelKeyAddRequest    `json:"keys_to_add,omitempty"`

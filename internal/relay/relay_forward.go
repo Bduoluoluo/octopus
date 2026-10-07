@@ -86,6 +86,13 @@ func (ra *relayAttempt) forwardViaWS(ctx context.Context) (int, error) {
 		wsUpstreamPool.Put(pc)
 		return -1, nil // fall through to HTTP
 	}
+	if ra.channel != nil && ra.channel.PromptSuffix != nil {
+		reqBody, _, err = helper.AppendPromptSuffixJSON(reqBody, ra.channel.Type, *ra.channel.PromptSuffix)
+		if err != nil {
+			wsUpstreamPool.Put(pc)
+			return -1, nil
+		}
+	}
 	ra.metrics.SetTransportRequestPayload(reqBody, ra.internalRequest.Model)
 
 	// Send response.create message
@@ -487,6 +494,11 @@ func (ra *relayAttempt) getStreamWriter() StreamWriter {
 func (ra *relayAttempt) applyParamOverride(outboundRequest *http.Request) error {
 	if err := helper.ApplyParamOverride(outboundRequest, ra.channel.ParamOverride); err != nil {
 		return err
+	}
+	if ra.channel != nil && ra.channel.PromptSuffix != nil {
+		if err := helper.ApplyPromptSuffix(outboundRequest, ra.channel.Type, *ra.channel.PromptSuffix); err != nil {
+			return err
+		}
 	}
 	if requestBody, readErr := readOutboundRequestBody(outboundRequest); readErr == nil {
 		ra.metrics.SetTransportRequestPayload(requestBody, ra.internalRequest.Model)

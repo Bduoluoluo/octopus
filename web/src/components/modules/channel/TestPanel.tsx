@@ -102,6 +102,7 @@ export function TestPanel({ channel, formData }: TestPanelProps) {
                 auto_group: formData.auto_group,
                 custom_header: formData.custom_header ?? [],
                 param_override: formData.param_override ?? null,
+                prompt_suffix: formData.prompt_suffix ?? null,
                 match_regex: formData.match_regex ?? null,
             };
             return { ...base, channel: tempChannel };

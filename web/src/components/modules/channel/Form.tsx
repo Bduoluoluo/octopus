@@ -36,6 +36,7 @@ export interface ChannelFormData {
     proxy_mode: Channel['proxy_mode'];
     proxy_config_id: number | null;
     param_override: string;
+    prompt_suffix: string;
     keys: ChannelKeyFormItem[];
     model: string;
     custom_model: string;
@@ -606,6 +607,20 @@ export function ChannelForm({
                                 placeholder={t('paramOverridePlaceholder')}
                                 className="min-h-28 w-full rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                             />
+                        </div>
+
+                        <div className="space-y-2">
+                            <label htmlFor={`${idPrefix}-prompt-suffix`} className="text-sm font-medium text-card-foreground">
+                                {t('promptSuffix')}
+                            </label>
+                            <textarea
+                                id={`${idPrefix}-prompt-suffix`}
+                                value={formData.prompt_suffix}
+                                onChange={(e) => onFormDataChange({ ...formData, prompt_suffix: e.target.value })}
+                                placeholder={t('promptSuffixPlaceholder')}
+                                className="min-h-20 w-full rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            />
+                            <p className="text-xs text-muted-foreground">{t('promptSuffixHint')}</p>
                         </div>
                     </AccordionContent>
                 </AccordionItem>

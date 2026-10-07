@@ -15,6 +15,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/coder/websocket"
+	"github.com/gin-gonic/gin"
 	dbpkg "github.com/xuanli27/octopus/internal/db"
 	"github.com/xuanli27/octopus/internal/model"
 	"github.com/xuanli27/octopus/internal/op"
@@ -23,8 +25,6 @@ import (
 	transformerModel "github.com/xuanli27/octopus/internal/transformer/model"
 	"github.com/xuanli27/octopus/internal/transformer/outbound"
 	"github.com/xuanli27/octopus/internal/utils/tokenizer"
-	"github.com/coder/websocket"
-	"github.com/gin-gonic/gin"
 )
 
 func TestHandleStreamResponsePassthroughAnthropicPreservesRawSSE(t *testing.T) {
@@ -936,6 +936,7 @@ func TestHandlerAppliesChannelParamOverride(t *testing.T) {
 	defer server.Close()
 
 	override := `{"temperature":0.2,"max_tokens":7}`
+	suffix := " [channel suffix]"
 	channel := &model.Channel{
 		Name:          "relay-param-override",
 		Type:          outbound.OutboundTypeOpenAIChat,
@@ -944,6 +945,7 @@ func TestHandlerAppliesChannelParamOverride(t *testing.T) {
 		Model:         "override-model",
 		Keys:          []model.ChannelKey{{Enabled: true, ChannelKey: "override-key"}},
 		ParamOverride: &override,
+		PromptSuffix:  &suffix,
 	}
 	if err := op.ChannelCreate(channel, ctx); err != nil {
 		t.Fatalf("ChannelCreate failed: %v", err)
@@ -979,6 +981,17 @@ func TestHandlerAppliesChannelParamOverride(t *testing.T) {
 	}
 	if payload["model"] != "override-model" {
 		t.Fatalf("expected model to remain upstream model, got %#v", payload["model"])
+	}
+	var messages []map[string]any
+	messageBytes, err := json.Marshal(payload["messages"])
+	if err != nil {
+		t.Fatalf("marshal upstream messages failed: %v", err)
+	}
+	if err := json.Unmarshal(messageBytes, &messages); err != nil {
+		t.Fatalf("unmarshal upstream messages failed: %v", err)
+	}
+	if len(messages) != 1 || messages[0]["content"] != "hello [channel suffix]" {
+		t.Fatalf("expected prompt suffix in upstream request, got %#v", messages)
 	}
 }
 
@@ -1177,9 +1190,15 @@ func TestForwardViaWSRedialsFreshRequestAfterStalePooledConnection(t *testing.T)
 		accepted.Add(1)
 		defer conn.Close(websocket.StatusNormalClosure, "")
 
-		_, _, err = conn.Read(r.Context())
+		_, requestBody, err := conn.Read(r.Context())
 		if err != nil {
 			return
+		}
+		var payload struct {
+			Input string `json:"input"`
+		}
+		if err := json.Unmarshal(requestBody, &payload); err != nil || payload.Input != "hello [ws suffix]" {
+			t.Errorf("WS transform suffix missing or duplicated: %s, %v", requestBody, err)
 		}
 
 		_ = conn.Write(r.Context(), websocket.MessageText, []byte(`{"type":"response.created","response":{"id":"resp_new","model":"gpt-4o"}}`))
@@ -1189,12 +1208,13 @@ func TestForwardViaWSRedialsFreshRequestAfterStalePooledConnection(t *testing.T)
 	defer wsServer.Close()
 
 	channel := &model.Channel{
-		Name:     "relay-ws-redial",
-		Type:     outbound.OutboundTypeOpenAIResponse,
-		Enabled:  true,
-		BaseUrls: []model.BaseUrl{{URL: wsServer.URL + "/v1"}},
-		Model:    "gpt-4o",
-		Keys:     []model.ChannelKey{{Enabled: true, ChannelKey: "fresh-key"}},
+		Name:         "relay-ws-redial",
+		PromptSuffix: stringPtr(" [ws suffix]"),
+		Type:         outbound.OutboundTypeOpenAIResponse,
+		Enabled:      true,
+		BaseUrls:     []model.BaseUrl{{URL: wsServer.URL + "/v1"}},
+		Model:        "gpt-4o",
+		Keys:         []model.ChannelKey{{Enabled: true, ChannelKey: "fresh-key"}},
 	}
 	if err := op.ChannelCreate(channel, ctx); err != nil {
 		t.Fatalf("ChannelCreate failed: %v", err)
@@ -1210,7 +1230,7 @@ func TestForwardViaWSRedialsFreshRequestAfterStalePooledConnection(t *testing.T)
 	writer := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(writer)
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
-	internalReq := &transformerModel.InternalLLMRequest{Model: "gpt-4o", Stream: boolPtr(true)}
+	internalReq := &transformerModel.InternalLLMRequest{Model: "gpt-4o", Stream: boolPtr(true), Messages: []transformerModel.Message{{Role: "user", Content: transformerModel.MessageContent{Content: stringPtr("hello")}}}}
 	req := &relayRequest{
 		c:               c,
 		inAdapter:       inbound.Get(inbound.InboundTypeOpenAIResponse),

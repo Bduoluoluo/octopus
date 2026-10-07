@@ -62,6 +62,13 @@ func (p *Prober) RunCandidate(ctx context.Context, channel model.Channel, usedKe
 		result.DurationMS = time.Since(startedAt).Milliseconds()
 		return result
 	}
+	if channel.PromptSuffix != nil {
+		if err := helper.ApplyPromptSuffix(request, channel.Type, *channel.PromptSuffix); err != nil {
+			result.ErrorMessage = err.Error()
+			result.DurationMS = time.Since(startedAt).Milliseconds()
+			return result
+		}
+	}
 
 	httpClient, err := helper.ChannelHTTPClientWithContext(probeCtx, &channel)
 	if err != nil {

@@ -52,14 +52,16 @@ func TestForwardViaWSPassthroughNormalizesPayloadAndRecordsMetrics(t *testing.T)
 	}))
 	defer wsServer.Close()
 
+	suffix := " [ws suffix]"
 	channel := &model.Channel{
-		Name:     "relay-ws-passthrough",
-		Type:     outbound.OutboundTypeOpenAIResponse,
-		Enabled:  true,
-		BaseUrls: []model.BaseUrl{{URL: wsServer.URL + "/v1"}},
-		Model:    "gpt-4o",
-		Keys:     []model.ChannelKey{{Enabled: true, ChannelKey: "passthrough-key"}},
-		WSMode:   model.ChannelWSModePassthrough,
+		Name:         "relay-ws-passthrough",
+		PromptSuffix: &suffix,
+		Type:         outbound.OutboundTypeOpenAIResponse,
+		Enabled:      true,
+		BaseUrls:     []model.BaseUrl{{URL: wsServer.URL + "/v1"}},
+		Model:        "gpt-4o",
+		Keys:         []model.ChannelKey{{Enabled: true, ChannelKey: "passthrough-key"}},
+		WSMode:       model.ChannelWSModePassthrough,
 	}
 	if err := op.ChannelCreate(channel, ctx); err != nil {
 		t.Fatalf("ChannelCreate failed: %v", err)
@@ -103,6 +105,9 @@ func TestForwardViaWSPassthroughNormalizesPayloadAndRecordsMetrics(t *testing.T)
 	}
 	if got := string(payload["model"]); got != `"gpt-4o"` {
 		t.Fatalf("expected upstream model rewrite, got %s", got)
+	}
+	if string(payload["input"]) != `"hello [ws suffix]"` || strings.Contains(string(rawBody), suffix) {
+		t.Fatalf("suffix not applied to WS payload independently: %s", payload["input"])
 	}
 
 	var downstreamModels []string

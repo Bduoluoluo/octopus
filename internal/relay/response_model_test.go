@@ -301,6 +301,12 @@ func TestResponseModelMismatchResetsAfterFailover(t *testing.T) {
 func TestResponseModelCompactProxy(t *testing.T) {
 	setupRelayTestDB(t)
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		var payload struct {
+			Input string `json:"input"`
+		}
+		if err := json.NewDecoder(request.Body).Decode(&payload); err != nil || payload.Input != "hi [compact suffix]" {
+			t.Errorf("compact suffix missing or duplicated: %+v, %v", payload, err)
+		}
 		writer.Header().Set("Content-Type", "application/json")
 		_, _ = io.WriteString(writer, `{"id":"compact-1","model":"returned-model","output":[],"usage":{"input_tokens":10,"output_tokens":2}}`)
 	}))
@@ -308,7 +314,7 @@ func TestResponseModelCompactProxy(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	ginContext, _ := gin.CreateTestContext(recorder)
 	ginContext.Request = httptest.NewRequest(http.MethodPost, "/v1/responses/compact", nil)
-	channel := &dbmodel.Channel{ID: 1, BaseUrls: []dbmodel.BaseUrl{{URL: server.URL}}}
+	channel := &dbmodel.Channel{ID: 1, Type: outbound.OutboundTypeOpenAIResponse, PromptSuffix: stringPtr(" [compact suffix]"), BaseUrls: []dbmodel.BaseUrl{{URL: server.URL}}}
 	iter := balancer.NewIterator(dbmodel.Group{Mode: dbmodel.GroupModeFailover, Items: []dbmodel.GroupItem{{ChannelID: 1, ModelName: "public-model"}}}, 1, "public-model")
 	iter.Next()
 	metrics := NewRelayMetrics(1, "public-model", nil, nil)

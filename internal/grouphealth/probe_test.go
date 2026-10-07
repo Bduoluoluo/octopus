@@ -31,6 +31,8 @@ func TestBuildProbeRequestForResponses(t *testing.T) {
 }
 
 func TestRunCandidateResponsesStream(t *testing.T) {
+	suffix := "\nhealth suffix\n"
+	override := `{"input":[{"role":"user","content":[{"type":"input_text","text":"overridden"}]}]}`
 	for _, mode := range []string{"success", "error", "timeout"} {
 		t.Run(mode, func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
@@ -43,6 +45,18 @@ func TestRunCandidateResponsesStream(t *testing.T) {
 				}
 				if request.Header.Get("X-Probe-Test") != "custom" {
 					t.Error("missing custom header")
+				}
+				encodedInput, err := json.Marshal(body["input"])
+				var input []struct {
+					Content []struct {
+						Type string `json:"type"`
+						Text string `json:"text"`
+					} `json:"content"`
+				}
+				if err != nil || json.Unmarshal(encodedInput, &input) != nil || len(input) != 1 || len(input[0].Content) != 2 {
+					t.Errorf("invalid health probe payload: %s", encodedInput)
+				} else if input[0].Content[0].Text != "overridden" || input[0].Content[1].Text != suffix || input[0].Content[1].Type != "input_text" {
+					t.Errorf("health suffix must follow parameter overrides: %s", encodedInput)
 				}
 				writer.Header().Set("Content-Type", "text/event-stream")
 				_, _ = io.WriteString(writer, "data: {\"type\":\"response.created\"}\n\n")
@@ -58,6 +72,8 @@ func TestRunCandidateResponsesStream(t *testing.T) {
 			}))
 			defer server.Close()
 			channel := model.Channel{Type: outbound.OutboundTypeOpenAIChat, BaseUrls: []model.BaseUrl{{URL: server.URL}}, CustomHeader: []model.CustomHeader{{HeaderKey: "X-Probe-Test", HeaderValue: "custom"}}}
+			channel.PromptSuffix = &suffix
+			channel.ParamOverride = &override
 			prober := NewProber()
 			if prober.CandidateTimeout != 10*time.Second {
 				t.Fatal("expected 10 second default")

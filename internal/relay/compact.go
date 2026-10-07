@@ -227,7 +227,18 @@ func forwardResponsesCompact(c *gin.Context, metrics *RelayMetrics, iter *balanc
 		span.End(dbmodel.AttemptFailed, 0, err.Error())
 		return 0, 0, fmt.Errorf("failed to create compact request: %w", err)
 	}
-	metrics.SetTransportRequestPayload(requestBody, metrics.RequestModel)
+	if channel.PromptSuffix != nil {
+		if err := helper.ApplyPromptSuffix(request, channel.Type, *channel.PromptSuffix); err != nil {
+			span.End(dbmodel.AttemptFailed, 0, err.Error())
+			return 0, 0, fmt.Errorf("failed to append prompt suffix: %w", err)
+		}
+	}
+	transportBody, readErr := readOutboundRequestBody(request)
+	if readErr != nil {
+		span.End(dbmodel.AttemptFailed, 0, readErr.Error())
+		return 0, 0, fmt.Errorf("failed to read compact request body: %w", readErr)
+	}
+	metrics.SetTransportRequestPayload(transportBody, metrics.RequestModel)
 	copyProxyHeaders(c.Request.Header, channel, request.Header)
 
 	response, err := sendCompactRequest(channel, request)

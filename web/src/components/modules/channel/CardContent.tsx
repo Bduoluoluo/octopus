@@ -52,6 +52,7 @@ export function CardContent({ channel, stats }: { channel: Channel; stats: Stats
         proxy_mode: channel.proxy_mode ?? 'direct',
         proxy_config_id: channel.proxy_config_id ?? null,
         param_override: channel.param_override ?? '',
+        prompt_suffix: channel.prompt_suffix ?? '',
         keys: channel.keys.length > 0
             ? channel.keys.map((k) => ({
                 id: k.id,
@@ -127,6 +128,12 @@ export function CardContent({ channel, stats }: { channel: Channel; stats: Stats
         if (nextParamOverride !== curParamOverride) {
             // Empty string means "clear" for patch semantics; backend maps it to NULL.
             req.param_override = nextParamOverride;
+        }
+
+        const nextPromptSuffix = formData.prompt_suffix;
+        const curPromptSuffix = channel.prompt_suffix ?? '';
+        if (nextPromptSuffix !== curPromptSuffix) {
+            req.prompt_suffix = nextPromptSuffix;
         }
 
         const nextMatchRegex = formData.match_regex.trim();

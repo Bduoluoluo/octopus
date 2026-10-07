@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
+	"github.com/xuanli27/octopus/internal/helper"
 	dbmodel "github.com/xuanli27/octopus/internal/model"
 	transformerModel "github.com/xuanli27/octopus/internal/transformer/model"
 	openaiOutbound "github.com/xuanli27/octopus/internal/transformer/outbound/openai"
@@ -180,7 +181,17 @@ func (ra *relayAttempt) buildWSPassthroughRequestPayload() ([]byte, error) {
 		}
 		payload["model"] = modelBytes
 	}
-	return json.Marshal(payload)
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+	if ra.channel != nil && ra.channel.PromptSuffix != nil {
+		payloadBytes, _, err = helper.AppendPromptSuffixJSON(payloadBytes, ra.channel.Type, *ra.channel.PromptSuffix)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return payloadBytes, nil
 }
 
 func (ra *relayAttempt) handleWSPassthroughStream(ctx context.Context, pc *pooledConn) (*wsPassthroughStats, error) {
