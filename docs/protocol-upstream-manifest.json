@@ -1,0 +1,10 @@
+{
+  "octopus_baseline": "98c380bc205b673f3f9c42100ba68397df7a9947",
+  "source_repository": "https://github.com/looplj/axonhub",
+  "source_commit": "e863c6fe1942deddd0f6e471fa003c430e5314f0",
+  "source_archive": "https://codeload.github.com/looplj/axonhub/tar.gz/e863c6fe1942deddd0f6e471fa003c430e5314f0",
+  "source_license": "LGPL-3.0 for llm/ per pinned NOTICE, subject to individual file headers",
+  "stage": "P0",
+  "files": [],
+  "excluded": ["pipeline", "router", "balancer", "HTTP/WS executors", "key management", "database", "session storage", "Bedrock", "Vertex", "OAuth", "automatic cache optimization", "upstream go.mod and go.sum"]
+}
