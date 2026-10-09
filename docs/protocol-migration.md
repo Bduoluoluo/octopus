@@ -65,4 +65,14 @@ The preserved Chat upstream tests use testify v1.11.1 plus its three indirect de
 
 ### Rollback
 
+### P3: frame-state and aggregation gate
+
+All legacy stream entrypoints delegate to the frame/event state held by the same adapter. Choice finish is separate from transport completion; trailing Chat usage is consumed. Responses requires a semantic terminal, distinguishes incomplete/failed, and reconciles final snapshots with emitted deltas. Anthropic maintains block-indexed citations, signatures and parallel tool arguments. EOF on unfinished streams errors; state reset preserves parsed request context and cannot authorize a retry after output.
+
+The shared aggregate retains ordered native items, text-block citations and reasoning/signature fragments, raw Responses output, cumulative usage, and status/error metadata. Malformed native sidecars are surfaced rather than ignored. No complete second request/response IR or per-chunk whole Stream exists.
+
+The new 18-case matrix, citations stream fixtures, metadata/reset tests and ordered aggregate contract tests pass under Go 1.25.0 along with all retained protocol tests. Limited fuzz completed: Chat request union 383843 executions, Chat tool fragments 25038, citation union 324850 (10-second budgets, two workers). These are finite runs, not a proof of exhaustive coverage. Full relay lifecycle wiring and SSE contracts are tracked in P4/P6.
+
+### Rollback procedure
+
 Before deployment, back up database and configuration. Revert migration commits in reverse stage order or deploy the baseline image. Do not renumber, delete or rewrite persisted channel types. Preserve the user-owned task specification and unrelated changes during rollback.
