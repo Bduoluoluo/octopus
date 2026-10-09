@@ -9,7 +9,7 @@ const responseMetadataTransformerMetadataKey = "openai_responses_raw_metadata_ev
 const responseHeadersTransformerMetadataKey = "openai_responses_transport_headers"
 
 // StreamEventType defines the type of streaming events for the OpenAI Responses API.
-type StreamEventType string
+type StreamEventType = string
 
 const (
 	StreamEventTypeError StreamEventType = "error"
@@ -75,6 +75,7 @@ type StreamEvent struct {
 	SequenceNumber int             `json:"sequence_number"`
 	Status         int             `json:"status,omitempty"`
 	Error          *Error          `json:"error,omitempty"`
+	Annotation     *Annotation     `json:"annotation,omitempty"`
 
 	// For response.* events
 	Response *Response `json:"response,omitempty"`
@@ -96,7 +97,8 @@ type StreamEvent struct {
 	Delta string `json:"delta,omitempty"`
 
 	// For output_text.done, reasoning_summary_text.done, and reasoning_text.done events.
-	Text string `json:"text,omitempty"`
+	Text    string `json:"text,omitempty"`
+	Refusal string `json:"refusal,omitempty"`
 
 	// For function_call_arguments.done events
 	Name      string `json:"name,omitempty"`
@@ -151,7 +153,7 @@ type StreamEventContentPart struct {
 	// Any of "output_text", "reasoning", "refusal".
 	Type string `json:"type"`
 	// The text of the part, for output_text.
-	Text string `json:"text"`
+	Text *string `json:"text,omitempty"`
 	// The annotations of the output text part.
 	Annotations []Annotation `json:"annotations,omitzero"`
 	// The refusal reason, for refusal.

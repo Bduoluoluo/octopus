@@ -33,7 +33,7 @@ Factories construct a fresh inbound/outbound object. Retained interfaces are `In
 
 ### Validation and completion tracking
 
-P0 and P1 completed. P2-P6 have not been implemented or validated. No production migration completion is claimed by this document until the corresponding results are recorded.
+P0 and P1 completed. P2 integrates the retained codecs and compatibility facades. P3-P6 verification and integration records follow as their gates complete; intermediate commits are not independent deployment recommendations.
 
 P1 adds selected upstream wire DTOs in three protocol packages, local frame/lifecycle interfaces, namespace extensions and a deep request clone. It does not switch production traffic. No upstream llm Request/Response or executor is imported. Upstream usage DTOs exclude cost fields/calculation and provider-specific accounting. Citation wire unions locally extend the pinned source with document configuration, complete position fields, unknown fields, explicit false/null and assistant history support. Targeted protocol and IR tests pass under Go 1.26.3 and Go 1.25.0.
 
@@ -50,6 +50,18 @@ Baseline (Go 1.26.3, windows/amd64, Intel i7-14700F; single run, not a statistic
 `python scripts/audit-retired-protocols.py data/data.db` found no retired channels, no groups referencing retired channels and no groups lacking a configured enabled supported channel with an enabled nonempty key. This is a local configuration snapshot, not a deployment-wide health assessment. The script uses SQLite read-only mode, a read transaction and query-only pragma, and never selects secret key values for output. Run it against each deployment before upgrading. MySQL/PostgreSQL deployments require an equivalent read-only query/export; this SQLite tool does not inspect them.
 
 The pinned AxonHub archive was downloaded from the SHA-addressed GitHub codeload endpoint. Its NOTICE assigns `llm/` to LGPL-3.0, subject to per-file overrides. The old Octopus transformer MIT attribution must remain separate from newly adapted LGPL sources.
+
+### P2: direct codecs and compatibility facades
+
+Pinned wire models now feed Octopus's sole IR directly. Responses and Anthropic baseline codec/tests were moved into their protocol directories and selectively enhanced; Chat conversion uses the pinned direct mapping. There is no upstream llm.Request/Response or JSON conversion between two complete IRs. Exported aliases retain the existing relay helpers and types. The actual production references are in `protocol-exported-symbols.json`; per-protocol SOURCES.md records source functions and local adaptations. The manifest includes source SHA256 hashes and distinguishes relocated Octopus files from newly selected upstream logic.
+
+The codec integration includes the minimum frame-state implementation needed by the compatibility facades. P3 separately gates aggregate fidelity, stream lifecycle and adversarial fixtures; P4 alone wires those lifecycle hooks into HTTP/WS relay. This dependency overlap avoids introducing a second temporary stream engine.
+
+`go test -mod=readonly ./internal/protocol/... ./internal/transformer/... -count=1` passes on Go 1.25.0. The 18-case public matrix sends each converted request to a local fake HTTP upstream and verifies instructions, text, tool definitions/history/results; non-stream output is parsed again and actual downstream SSE is also decoded again to verify text, tool IDs/arguments, usage and completion. It does not claim every native feature supports every cross-protocol direction.
+
+Protocol fixes include block-discriminated citations, source item order, function argument string encoding, unknown fields and explicit zero/false/null, parallel tool indices, and errors for unrepresentable cross-protocol content. Octopus's existing Anthropic cache-key derivation, sampling/default behavior and accounting adapters remain; AxonHub's product defaults and automatic cache optimization were not imported.
+
+The preserved Chat upstream tests use testify v1.11.1 plus its three indirect dependencies already present in go.sum; no new runtime dependency or copied upstream module file is introduced. Go remains 1.25.0.
 
 ### Rollback
 

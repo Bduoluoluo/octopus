@@ -189,6 +189,8 @@ func (r *InternalLLMRequest) SetAnthropicExtensions(ext AnthropicExtension) {
 		providerExtensions.Anthropic = &AnthropicExtension{}
 	}
 	extCopy := AnthropicExtension{
+		Fields:       cloneProtocolFields(ext.Fields),
+		Items:        cloneProtocolItems(ext.Items),
 		Beta:         append([]string(nil), ext.Beta...),
 		CacheControl: cloneCacheControl(ext.CacheControl),
 		MCPServers:   cloneRawMessage(ext.MCPServers),
@@ -417,6 +419,12 @@ func mergeGeminiExtension(dst *GeminiExtension, src *GeminiExtension) {
 func mergeAnthropicExtension(dst *AnthropicExtension, src *AnthropicExtension) {
 	if dst == nil || src == nil {
 		return
+	}
+	if src.Fields != nil {
+		dst.Fields = cloneProtocolFields(src.Fields)
+	}
+	if src.Items != nil {
+		dst.Items = cloneProtocolItems(src.Items)
 	}
 	if len(src.Beta) > 0 {
 		dst.Beta = append(dst.Beta[:0], src.Beta...)

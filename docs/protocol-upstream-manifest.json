@@ -4,68 +4,364 @@
   "source_commit": "e863c6fe1942deddd0f6e471fa003c430e5314f0",
   "source_archive": "https://codeload.github.com/looplj/axonhub/tar.gz/e863c6fe1942deddd0f6e471fa003c430e5314f0",
   "source_license": "LGPL-3.0 for llm/ per pinned NOTICE, subject to individual file headers",
-  "stage": "P1",
+  "stage": "P2 codec integration; P3-P6 validation recorded separately",
   "files": [
-  {
-    "source_path": "llm/transformer/openai/model.go",
-    "local_path": "internal/protocol/openaichat/model.go",
-    "adaptation": "Wire DTOs only; direct references to Octopus IR and local pure JSON helpers; no upstream executors.",
-    "license": "LGPL-3.0 (llm source); source NOTICE reproduced for attribution"
+    {
+      "sha256": "f1df4c80b9611dee41a4d1f2ec9d7ce34f1049b221231f16926a03776c32c853",
+      "source_path": "llm/transformer/openai/model.go",
+      "local_paths": [
+        "internal/protocol/openaichat/model.go",
+        "internal/protocol/openaichat/fields.go"
+      ],
+      "license": "LGPL-3.0 for llm; NOTICE attribution scope retained",
+      "adaptation": "Selective wire/direct IR/frame logic; Octopus interfaces, transport, accounting and policy retained. See per-protocol SOURCES.md for function-level adaptation and differences."
+    },
+    {
+      "sha256": "ab535075145be3369eb872d9046993559be54bb33930f029081a4f8d8f6ad761",
+      "source_path": "llm/transformer/openai/inbound_convert.go",
+      "local_paths": [
+        "internal/protocol/openaichat/inbound_convert.go"
+      ],
+      "license": "LGPL-3.0 for llm; NOTICE attribution scope retained",
+      "adaptation": "Selective wire/direct IR/frame logic; Octopus interfaces, transport, accounting and policy retained. See per-protocol SOURCES.md for function-level adaptation and differences."
+    },
+    {
+      "sha256": "e331079b60edfc55e8145a94007d039b06fa2c4e75de8b4680da7e7f74b8e9c6",
+      "source_path": "llm/transformer/openai/outbound_convert.go",
+      "local_paths": [
+        "internal/protocol/openaichat/outbound_convert.go"
+      ],
+      "license": "LGPL-3.0 for llm; NOTICE attribution scope retained",
+      "adaptation": "Selective wire/direct IR/frame logic; Octopus interfaces, transport, accounting and policy retained. See per-protocol SOURCES.md for function-level adaptation and differences."
+    },
+    {
+      "sha256": "3f90484399ff13aea8d8f8cc5160dbd6ec2538942cf52385662284ced4c163d5",
+      "source_path": "llm/transformer/openai/outbound.go",
+      "local_paths": [
+        "internal/protocol/openaichat/stream.go"
+      ],
+      "license": "LGPL-3.0 for llm; NOTICE attribution scope retained",
+      "adaptation": "Selective wire/direct IR/frame logic; Octopus interfaces, transport, accounting and policy retained. See per-protocol SOURCES.md for function-level adaptation and differences."
+    },
+    {
+      "sha256": "380cb89be99cf543231cd05de0af239cca29e8e69f377321201bd3a1a3c6b53d",
+      "source_path": "llm/transformer/openai/inbound_stream.go",
+      "local_paths": [
+        "internal/protocol/openaichat/stream.go"
+      ],
+      "license": "LGPL-3.0 for llm; NOTICE attribution scope retained",
+      "adaptation": "Selective wire/direct IR/frame logic; Octopus interfaces, transport, accounting and policy retained. See per-protocol SOURCES.md for function-level adaptation and differences."
+    },
+    {
+      "sha256": "a04afb62cf7f793c3c18634f8c16d51269d76d48605451f848c7be1f73c5dd28",
+      "source_path": "llm/transformer/openai/model_test.go",
+      "local_paths": [
+        "internal/protocol/openaichat/upstream_model_test.go"
+      ],
+      "license": "LGPL-3.0 for llm; NOTICE attribution scope retained",
+      "adaptation": "Selected protocol fixtures/assertions adapted to Octopus APIs; no upstream execution harness."
+    },
+    {
+      "sha256": "e8856c486e83991a7b7eadd64fa6aa485da826bae71281a112c5d101200433e5",
+      "source_path": "llm/transformer/openai/usage.go",
+      "local_paths": [
+        "internal/protocol/openaichat/usage.go",
+        "internal/protocol/openaichat/usage_convert.go"
+      ],
+      "license": "LGPL-3.0 for llm; NOTICE attribution scope retained",
+      "adaptation": "Selective wire/direct IR/frame logic; Octopus interfaces, transport, accounting and policy retained. See per-protocol SOURCES.md for function-level adaptation and differences."
+    },
+    {
+      "sha256": "0868c0fb04359a5afbd518fb969bd12c739d5b4cc8bc89e4874d5d0cc321c006",
+      "source_path": "llm/transformer/openai/google.go",
+      "local_paths": [
+        "internal/protocol/openaichat/extensions.go"
+      ],
+      "license": "LGPL-3.0 for llm; NOTICE attribution scope retained",
+      "adaptation": "Selective wire/direct IR/frame logic; Octopus interfaces, transport, accounting and policy retained. See per-protocol SOURCES.md for function-level adaptation and differences."
+    },
+    {
+      "sha256": "cc63fe6318dcd56b431feecb422603f57ed6ee22b6478f9d5a2da39d9f5c8933",
+      "source_path": "llm/transformer/openai/responses/model.go",
+      "local_paths": [
+        "internal/protocol/openairesponses/model.go",
+        "internal/protocol/openairesponses/extensions.go"
+      ],
+      "license": "LGPL-3.0 for llm; NOTICE attribution scope retained",
+      "adaptation": "Selective wire/direct IR/frame logic; Octopus interfaces, transport, accounting and policy retained. See per-protocol SOURCES.md for function-level adaptation and differences."
+    },
+    {
+      "sha256": "2e7c4e88ec3250b48b4b0ebbc368d20d0aa070821c612726349c64dcf108af8e",
+      "source_path": "llm/transformer/openai/responses/model_test.go",
+      "local_paths": [
+        "internal/protocol/openairesponses/migration_test.go"
+      ],
+      "license": "LGPL-3.0 for llm; NOTICE attribution scope retained",
+      "adaptation": "Selected protocol fixtures/assertions adapted to Octopus APIs; no upstream execution harness."
+    },
+    {
+      "sha256": "f6532357ffd9aeb3ce751fb11a7ea283eda3b30a93a5a9e177c95e4174dfc1c5",
+      "source_path": "llm/transformer/openai/responses/stream_event.go",
+      "local_paths": [
+        "internal/protocol/openairesponses/stream_event.go"
+      ],
+      "license": "LGPL-3.0 for llm; NOTICE attribution scope retained",
+      "adaptation": "Selective wire/direct IR/frame logic; Octopus interfaces, transport, accounting and policy retained. See per-protocol SOURCES.md for function-level adaptation and differences."
+    },
+    {
+      "sha256": "ef67b805a743be2d7931078c0e8700d1ea1a57075797f7dbf2f0a8fdf7d6430b",
+      "source_path": "llm/transformer/openai/responses/stream_event_test.go",
+      "local_paths": [
+        "internal/protocol/openairesponses/upstream_model_test.go"
+      ],
+      "license": "LGPL-3.0 for llm; NOTICE attribution scope retained",
+      "adaptation": "Selected protocol fixtures/assertions adapted to Octopus APIs; no upstream execution harness."
+    },
+    {
+      "sha256": "dc0bd26da45e973078ef6285e5739070a84b7331fee8f209e72af3888a23de72",
+      "source_path": "llm/transformer/openai/responses/usage.go",
+      "local_paths": [
+        "internal/protocol/openairesponses/usage.go",
+        "internal/protocol/openairesponses/outbound/response.go"
+      ],
+      "license": "LGPL-3.0 for llm; NOTICE attribution scope retained",
+      "adaptation": "Selective wire/direct IR/frame logic; Octopus interfaces, transport, accounting and policy retained. See per-protocol SOURCES.md for function-level adaptation and differences."
+    },
+    {
+      "sha256": "81af9fe82f1f8bc5cbca6bafd044ff0efe6df5a768f9987150b02b58b59d3c1b",
+      "source_path": "llm/transformer/openai/responses/outbound_stream.go",
+      "local_paths": [
+        "internal/protocol/openairesponses/outbound/stream.go"
+      ],
+      "license": "LGPL-3.0 for llm; NOTICE attribution scope retained",
+      "adaptation": "Selective wire/direct IR/frame logic; Octopus interfaces, transport, accounting and policy retained. See per-protocol SOURCES.md for function-level adaptation and differences."
+    },
+    {
+      "sha256": "7f0ade77394abb1dae145e5f76b0efd2964e0efae18b75a7d1fed177bf42d271",
+      "source_path": "llm/transformer/openai/responses/inbound_stream.go",
+      "local_paths": [
+        "internal/protocol/openairesponses/inbound/response.go",
+        "internal/protocol/openairesponses/inbound/extensions.go"
+      ],
+      "license": "LGPL-3.0 for llm; NOTICE attribution scope retained",
+      "adaptation": "Selective wire/direct IR/frame logic; Octopus interfaces, transport, accounting and policy retained. See per-protocol SOURCES.md for function-level adaptation and differences."
+    },
+    {
+      "sha256": "2369e86bc5eeea3d77abe9e1e811dbb240d1f47f97e0fcbf189984af50c01513",
+      "source_path": "llm/transformer/openai/responses/request_extensions.go",
+      "local_paths": [
+        "internal/protocol/openairesponses/inbound/extensions.go",
+        "internal/protocol/openairesponses/outbound/extensions.go"
+      ],
+      "license": "LGPL-3.0 for llm; NOTICE attribution scope retained",
+      "adaptation": "Selective wire/direct IR/frame logic; Octopus interfaces, transport, accounting and policy retained. See per-protocol SOURCES.md for function-level adaptation and differences."
+    },
+    {
+      "sha256": "c91232dfe4ffaa89619031fa305d8dd51d600cf2e66284bef4609fd5e6df66fe",
+      "source_path": "llm/transformer/openai/responses/namespace.go",
+      "local_paths": [
+        "internal/protocol/openairesponses/inbound/extensions.go"
+      ],
+      "license": "LGPL-3.0 for llm; NOTICE attribution scope retained",
+      "adaptation": "Selective wire/direct IR/frame logic; Octopus interfaces, transport, accounting and policy retained. See per-protocol SOURCES.md for function-level adaptation and differences."
+    },
+    {
+      "sha256": "630f13a8eee87df0d0b83da8a3999f3cdc547da92a656474efcb16684d068d99",
+      "source_path": "llm/transformer/openai/responses/inbound.go",
+      "local_paths": [
+        "internal/protocol/openairesponses/inbound/response.go"
+      ],
+      "license": "LGPL-3.0 for llm; NOTICE attribution scope retained",
+      "adaptation": "Selective wire/direct IR/frame logic; Octopus interfaces, transport, accounting and policy retained. See per-protocol SOURCES.md for function-level adaptation and differences."
+    },
+    {
+      "sha256": "8e8cc9fb36e071c72baf24dd8dcfb11d2a4094c48901bf3f7a28e00984c60108",
+      "source_path": "llm/transformer/openai/responses/outbound_convert.go",
+      "local_paths": [
+        "internal/protocol/openairesponses/outbound/response.go",
+        "internal/protocol/openairesponses/outbound/output.go"
+      ],
+      "license": "LGPL-3.0 for llm; NOTICE attribution scope retained",
+      "adaptation": "Selective wire/direct IR/frame logic; Octopus interfaces, transport, accounting and policy retained. See per-protocol SOURCES.md for function-level adaptation and differences."
+    },
+    {
+      "sha256": "cb412e7cd3360492679bc05903df0d5af45e7826ac706e271285c73f52b19c0d",
+      "source_path": "llm/transformer/openai/responses/outbound_stream_test.go",
+      "local_paths": [
+        "internal/protocol/openairesponses/migration_test.go"
+      ],
+      "license": "LGPL-3.0 for llm; NOTICE attribution scope retained",
+      "adaptation": "Selected protocol fixtures/assertions adapted to Octopus APIs; no upstream execution harness."
+    },
+    {
+      "sha256": "ca4cc064daac010aa4356523b5d0da6e8c7461d4f798dd2766a9ea6270b5ee17",
+      "source_path": "llm/transformer/openai/responses/namespace_validation_test.go",
+      "local_paths": [
+        "internal/protocol/openairesponses/migration_test.go"
+      ],
+      "license": "LGPL-3.0 for llm; NOTICE attribution scope retained",
+      "adaptation": "Selected protocol fixtures/assertions adapted to Octopus APIs; no upstream execution harness."
+    },
+    {
+      "sha256": "a5d4c5ffd54e9d40dc7f2a00e8f89366ddeb5c012ad86e6f1cb6431d56c53399",
+      "source_path": "llm/transformer/openai/responses/additional_tools_roundtrip_test.go",
+      "local_paths": [
+        "internal/protocol/openairesponses/migration_test.go"
+      ],
+      "license": "LGPL-3.0 for llm; NOTICE attribution scope retained",
+      "adaptation": "Selected protocol fixtures/assertions adapted to Octopus APIs; no upstream execution harness."
+    },
+    {
+      "sha256": "6444b267544dc1b49ecb19864ab1724113cdc047ea9085379d9f892fcc7c88a2",
+      "source_path": "llm/transformer/anthropic/model.go",
+      "local_paths": [
+        "internal/protocol/anthropic/model.go",
+        "internal/protocol/anthropic/fields.go",
+        "internal/protocol/anthropic/citations.go",
+        "internal/protocol/anthropic/compat.go"
+      ],
+      "license": "LGPL-3.0 for llm; NOTICE attribution scope retained",
+      "adaptation": "Selective wire/direct IR/frame logic; Octopus interfaces, transport, accounting and policy retained. See per-protocol SOURCES.md for function-level adaptation and differences."
+    },
+    {
+      "sha256": "ab6cf3059d470fff7d73a50b4c4247dfd6eed2ab6a2ff36b8db879f8a326db29",
+      "source_path": "llm/transformer/anthropic/model_json_test.go",
+      "local_paths": [
+        "internal/protocol/anthropic/upstream_model_test.go"
+      ],
+      "license": "LGPL-3.0 for llm; NOTICE attribution scope retained",
+      "adaptation": "Selected protocol fixtures/assertions adapted to Octopus APIs; no upstream execution harness."
+    },
+    {
+      "sha256": "31e6887d7519ef6aa7af7a438ad60447e6c71a00e4c86519b0c7ffa3af04e2de",
+      "source_path": "llm/transformer/anthropic/usage.go",
+      "local_paths": [
+        "internal/protocol/anthropic/usage.go"
+      ],
+      "license": "LGPL-3.0 for llm; NOTICE attribution scope retained",
+      "adaptation": "Selective wire/direct IR/frame logic; Octopus interfaces, transport, accounting and policy retained. See per-protocol SOURCES.md for function-level adaptation and differences."
+    },
+    {
+      "sha256": "ddd849112f3af2755915637994e38b5518815dcc0bdbd83daabb66a02b3ca1b9",
+      "source_path": "llm/transformer/anthropic/inbound_convert.go",
+      "local_paths": [
+        "internal/protocol/anthropic/inbound/messages.go",
+        "internal/protocol/anthropic/native.go"
+      ],
+      "license": "LGPL-3.0 for llm; NOTICE attribution scope retained",
+      "adaptation": "Selective wire/direct IR/frame logic; Octopus interfaces, transport, accounting and policy retained. See per-protocol SOURCES.md for function-level adaptation and differences."
+    },
+    {
+      "sha256": "04e8997e42385aa38b9addb42279e229ed28560e649fb3cf4ca53caabe0190e6",
+      "source_path": "llm/transformer/anthropic/outbound_convert.go",
+      "local_paths": [
+        "internal/protocol/anthropic/outbound/messages.go",
+        "internal/protocol/anthropic/outbound/native.go"
+      ],
+      "license": "LGPL-3.0 for llm; NOTICE attribution scope retained",
+      "adaptation": "Selective wire/direct IR/frame logic; Octopus interfaces, transport, accounting and policy retained. See per-protocol SOURCES.md for function-level adaptation and differences."
+    },
+    {
+      "sha256": "ba97ffbcd4c83cba2bbc68b1f664b22e5e78e24185b8eecd643e3f3eb7499b16",
+      "source_path": "llm/transformer/anthropic/outbound_stream.go",
+      "local_paths": [
+        "internal/protocol/anthropic/outbound/stream.go"
+      ],
+      "license": "LGPL-3.0 for llm; NOTICE attribution scope retained",
+      "adaptation": "Selective wire/direct IR/frame logic; Octopus interfaces, transport, accounting and policy retained. See per-protocol SOURCES.md for function-level adaptation and differences."
+    },
+    {
+      "sha256": "4389a732828a16ca8cd8cd64e9632c1747e98d565ecb1fe5cef5b29d22534721",
+      "source_path": "llm/transformer/anthropic/inbound_stream.go",
+      "local_paths": [
+        "internal/protocol/anthropic/inbound/stream.go"
+      ],
+      "license": "LGPL-3.0 for llm; NOTICE attribution scope retained",
+      "adaptation": "Selective wire/direct IR/frame logic; Octopus interfaces, transport, accounting and policy retained. See per-protocol SOURCES.md for function-level adaptation and differences."
+    },
+    {
+      "sha256": "6893ef4a567f9623ac167a7126ac1d4f767e33c3fc142a6245998f405a5c5dc8",
+      "source_path": "NOTICE",
+      "local_paths": [
+        "internal/protocol/NOTICE"
+      ],
+      "license": "LGPL-3.0 for llm; NOTICE attribution scope retained",
+      "adaptation": "Retain pinned ownership/license scope plus modification record."
+    },
+    {
+      "sha256": "f7a7df7ab3304426d8003ab4988c7e77d4acf0b748f57b2d0e96ab9a5c8e468e",
+      "source_path": "llm/LICENSE",
+      "local_paths": [
+        "internal/protocol/LICENSE-LGPL-3.0"
+      ],
+      "license": "LGPL-3.0 for llm; NOTICE attribution scope retained",
+      "adaptation": "License text retained."
+    }
+  ],
+  "historical_octopus_sources": [
+    {
+      "source_directory": "internal/transformer/inbound/anthropic",
+      "local_directory": "internal/protocol/anthropic/inbound",
+      "adaptation": "Retained codec behavior/tests relocated; wire aliases and new native/frame adapters; no prior tests discarded."
+    },
+    {
+      "source_directory": "internal/transformer/outbound/anthropic",
+      "local_directory": "internal/protocol/anthropic/outbound",
+      "adaptation": "Retained headers/accounting/conversion tests; pure upstream native/frame adaptation applied."
+    },
+    {
+      "source_directory": "internal/transformer/inbound/openai",
+      "local_directory": "internal/protocol/openairesponses/inbound",
+      "files": "response*.go and truncation_test.go",
+      "adaptation": "Responses codec/tests moved; root wire DTO aliases replace duplicate types; helpers remain behind transformer facade."
+    },
+    {
+      "source_directory": "internal/transformer/outbound/openai",
+      "local_directory": "internal/protocol/openairesponses/outbound",
+      "files": "response*.go",
+      "adaptation": "Responses codec/tests moved and adapted; exact Octopus continuation/cache/URL/header policies retained."
+    },
+    {
+      "source_directory": "internal/transformer/outbound/openai",
+      "local_directory": "internal/protocol/openaichat/outbound",
+      "files": "chat*.go",
+      "adaptation": "Chat HTTP builder and tests moved; pure codec/frame delegate, deep copy; no transport execution."
+    }
+  ],
+  "historical_license": "MIT-derived source attribution and Octopus AGPL modifications per internal/transformer/NOTICE; not relabeled as pinned LGPL",
+  "local_implementation": [
+    "internal/protocol/openaichat/codec.go",
+    "internal/protocol/openaichat/codec_test.go",
+    "internal/protocol/openaichat/fuzz_test.go",
+    "internal/protocol/anthropic/citations*.go",
+    "internal/protocol/anthropic/native_roundtrip_test.go",
+    "internal/protocol/matrix_test.go",
+    "internal/protocol/shared/json.go",
+    "internal/protocol/wire/frame.go",
+    "internal/transformer/model/protocol.go",
+    "internal/transformer/model/stream_citations.go"
+  ],
+  "additional_license": {
+    "local_path": "internal/protocol/LICENSE-GPL-3.0",
+    "source": "https://www.gnu.org/licenses/gpl-3.0.txt",
+    "reason": "GPL text incorporated by LGPL v3 supplement"
   },
-  {
-    "source_path": "llm/transformer/openai/responses/model.go",
-    "local_path": "internal/protocol/openairesponses/model.go",
-    "adaptation": "Wire DTOs only; direct references to Octopus IR and local pure JSON helpers; no upstream executors.",
-    "license": "LGPL-3.0 (llm source); source NOTICE reproduced for attribution"
+  "dependencies": {
+    "test_only": "github.com/stretchr/testify v1.11.1 and its three already-checksummed indirect dependencies for preserved upstream tests",
+    "runtime": "No new runtime dependency; existing lo and go-sse reused; no upstream go.mod/go.sum copied."
   },
-  {
-    "source_path": "llm/transformer/openai/responses/stream_event.go",
-    "local_path": "internal/protocol/openairesponses/stream_event.go",
-    "adaptation": "Wire DTOs only; direct references to Octopus IR and local pure JSON helpers; no upstream executors.",
-    "license": "LGPL-3.0 (llm source); source NOTICE reproduced for attribution"
-  },
-  {
-    "source_path": "llm/transformer/anthropic/model.go",
-    "local_path": "internal/protocol/anthropic/model.go",
-    "adaptation": "Wire DTOs only; direct references to Octopus IR and local pure JSON helpers; no upstream executors. Citation DTO extended with Octopus block-discriminated object/array union and complete location fields.",
-    "license": "LGPL-3.0 (llm source); source NOTICE reproduced for attribution"
-  },
-  {
-    "source_path": "llm/transformer/openai/usage.go",
-    "local_path": "internal/protocol/openaichat/usage.go",
-    "adaptation": "Only wire token-count structs; upstream cost and provider-platform accounting excluded.",
-    "license": "LGPL-3.0 (llm source); source NOTICE reproduced for attribution"
-  },
-  {
-    "source_path": "llm/transformer/openai/responses/usage.go",
-    "local_path": "internal/protocol/openairesponses/usage.go",
-    "adaptation": "Only wire token-count structs; upstream cost and provider-platform accounting excluded.",
-    "license": "LGPL-3.0 (llm source); source NOTICE reproduced for attribution"
-  },
-  {
-    "source_path": "llm/transformer/anthropic/usage.go",
-    "local_path": "internal/protocol/anthropic/usage.go",
-    "adaptation": "Only wire token-count structs; upstream cost and provider-platform accounting excluded.",
-    "license": "LGPL-3.0 (llm source); source NOTICE reproduced for attribution"
-  },
-  {
-    "source_path": "llm/LICENSE",
-    "local_path": "internal/protocol/LICENSE-LGPL-3.0",
-    "adaptation": "Unmodified license text.",
-    "license": "LGPL-3.0 (llm source); source NOTICE reproduced for attribution"
-  },
-  {
-    "source_path": "NOTICE",
-    "local_path": "internal/protocol/NOTICE",
-    "adaptation": "Preserve upstream ownership and scope; record selective adaptation.",
-    "license": "LGPL-3.0 (llm source); source NOTICE reproduced for attribution"
-  },
-  {
-    "source_path": "llm/transformer/openai/google.go",
-    "local_path": "internal/protocol/openaichat/extensions.go",
-    "adaptation": "Only standard-Chat tool extra-content DTO; no Gemini codec, stripping policy or provider platform.",
-    "license": "LGPL-3.0"
-  }
-],
-  "excluded": ["pipeline", "router", "balancer", "HTTP/WS executors", "key management", "database", "session storage", "Bedrock", "Vertex", "OAuth", "automatic cache optimization", "upstream go.mod and go.sum"]
+  "excluded": [
+    "pipeline",
+    "router",
+    "balancer",
+    "HTTP/WS executors",
+    "key management",
+    "database",
+    "session storage",
+    "Bedrock",
+    "Vertex",
+    "OAuth",
+    "automatic cache optimization",
+    "upstream go.mod and go.sum"
+  ]
 }

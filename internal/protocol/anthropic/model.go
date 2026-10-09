@@ -10,9 +10,12 @@ import (
 
 // MessageRequest represents the Anthropic Messages API request format.
 type MessageRequest struct {
-	MaxTokens int64          `json:"max_tokens" validate:"required,gte=1"`
-	Messages  []MessageParam `json:"messages"   validate:"required"`
-	Model     string         `json:"model,omitempty"      validate:"required"`
+	Fields     model.ProtocolFields `json:"-"`
+	MCPServers json.RawMessage      `json:"mcp_servers,omitempty"`
+	Container  json.RawMessage      `json:"container,omitempty"`
+	MaxTokens  int64                `json:"max_tokens" validate:"required,gte=1"`
+	Messages   []MessageParam       `json:"messages"   validate:"required"`
+	Model      string               `json:"model,omitempty"      validate:"required"`
 
 	// The version of the Anthropic API to use.
 	//
@@ -104,7 +107,8 @@ type MessageRequest struct {
 }
 
 type AnthropicMetadata struct {
-	UserID string `json:"user_id,omitempty"`
+	Fields model.ProtocolFields `json:"-"`
+	UserID string               `json:"user_id,omitempty"`
 }
 
 type SystemPrompt struct {
@@ -118,7 +122,7 @@ func (s *SystemPrompt) MarshalJSON() ([]byte, error) {
 		return json.Marshal(s.Prompt)
 	}
 
-	if len(s.MultiplePrompts) > 0 {
+	if s.MultiplePrompts != nil {
 		return json.Marshal(s.MultiplePrompts)
 	}
 
@@ -126,6 +130,7 @@ func (s *SystemPrompt) MarshalJSON() ([]byte, error) {
 }
 
 func (s *SystemPrompt) UnmarshalJSON(data []byte) error {
+	*s = SystemPrompt{}
 	var str string
 
 	err := json.Unmarshal(data, &str)
@@ -146,6 +151,7 @@ func (s *SystemPrompt) UnmarshalJSON(data []byte) error {
 }
 
 type SystemPromptPart struct {
+	Fields model.ProtocolFields `json:"-"`
 	// Type must be "text".
 	Type         string        `json:"type" validate:"required,oneof=text"`
 	Text         string        `json:"text" validate:"required"`
@@ -176,7 +182,7 @@ const TransformerMetadataKeyAnthropicResponseContent = "anthropic_response_conte
 
 type Thinking struct {
 	Type         string `json:"type"          validate:"required,oneof=enabled disabled adaptive"`
-	BudgetTokens int64  `json:"budget_tokens,omitempty" validate:"required_if=Type enabled"`
+	BudgetTokens *int64 `json:"budget_tokens,omitempty" validate:"required_if=Type enabled"`
 	// Display is an optional display name for the thinking, enum: summarized, omitted.
 	Display string `json:"display,omitempty"`
 }
@@ -202,6 +208,8 @@ type ToolChoice struct {
 
 // Tool represents a tool definition for Anthropic API.
 type Tool struct {
+	RawBody      json.RawMessage `json:"-"`
+	DeferLoading *bool           `json:"defer_loading,omitempty"`
 	// Type is used for native tools (e.g., "web_search_20250305").
 	// For custom/function tools, this field is omitted.
 	Type         string          `json:"type,omitempty"`
@@ -263,8 +271,9 @@ type InputSchema struct {
 
 // MessageParam represents a message in Anthropic format.
 type MessageParam struct {
-	Role    string         `json:"role"`
-	Content MessageContent `json:"content"`
+	Fields  model.ProtocolFields `json:"-"`
+	Role    string               `json:"role"`
+	Content MessageContent       `json:"content"`
 }
 
 // MessageContent supports both string and array formats.
@@ -321,6 +330,7 @@ func (c MessageContent) MarshalJSON() ([]byte, error) {
 }
 
 func (c *MessageContent) UnmarshalJSON(data []byte) error {
+	*c = MessageContent{}
 	if string(data) == "null" {
 		return fmt.Errorf("content cannot be null")
 	}
@@ -345,11 +355,19 @@ func (c *MessageContent) UnmarshalJSON(data []byte) error {
 		return nil
 	}
 
+	var block MessageContentBlock
+	if err := json.Unmarshal(data, &block); err == nil && block.Type != "" {
+		c.MultipleContent = []MessageContentBlock{block}
+		c.Raw = append(json.RawMessage(nil), data...)
+		return nil
+	}
+
 	return fmt.Errorf("invalid content type")
 }
 
 // MessageContentBlock represents different types of content blocks.
 type MessageContentBlock struct {
+	Context string `json:"context,omitempty"`
 	// Any of "text", "image", "thinking", "redacted_thinking", "tool_use", "server_tool_use", "tool_result".
 	Type string `json:"type"`
 
@@ -430,16 +448,18 @@ func (b MessageContentBlock) marshalKnownFields() ([]byte, error) {
 
 // ImageSource represents image source for Anthropic.
 type ImageSource struct {
+	Fields  model.ProtocolFields `json:"-"`
+	Content json.RawMessage      `json:"content,omitempty"`
 	// Type is the type of image source.
 	// Available values: base64, url
 	Type string `json:"type"`
 	// MediaType is the media type of image.
 	// Available values: image/png, image/jpeg, image/gif, image/webp
-	MediaType string `json:"media_type"`
+	MediaType string `json:"media_type,omitempty"`
 
 	// Data is the image data.
 	// If Type is base64, Data is the base64-encoded image data.
-	Data string `json:"data"`
+	Data string `json:"data,omitempty"`
 
 	// URL is the URL of the image.
 	// It will be present if Type is url.
@@ -448,6 +468,7 @@ type ImageSource struct {
 
 // StreamEvent represents events in Anthropic streaming response.
 type StreamEvent struct {
+	Error *ErrorDetail `json:"error,omitempty"`
 	// Any of "message_start", "message_delta", "message_stop", "content_block_start",
 	// "content_block_delta", "content_block_stop".
 	Type string `json:"type"`
@@ -528,6 +549,7 @@ type StreamMessage struct {
 
 // Message represents the Anthropic Messages API response format.
 type Message struct {
+	Fields  model.ProtocolFields  `json:"-"`
 	ID      string                `json:"id"`
 	Type    string                `json:"type"`
 	Role    string                `json:"role"`

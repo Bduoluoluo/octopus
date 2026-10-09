@@ -23,9 +23,16 @@ const (
 	StreamEventKindError             StreamEventKind = "error"
 	StreamEventKindCitationDelta     StreamEventKind = "citation_delta"
 	StreamEventKindNativeItem        StreamEventKind = "native_item"
+	StreamEventKindMetadata          StreamEventKind = "metadata"
+	StreamEventKindMessageDelta      StreamEventKind = "message_delta"
 )
 
 type StreamEvent struct {
+	Created           int64            `json:"created,omitempty"`
+	SystemFingerprint string           `json:"system_fingerprint,omitempty"`
+	ServiceTier       string           `json:"service_tier,omitempty"`
+	Message           *Message         `json:"message,omitempty"`
+	Logprobs          *LogprobsContent `json:"logprobs,omitempty"`
 	OutputIndex       *int             `json:"output_index,omitempty"`
 	ContentIndex      *int             `json:"content_index,omitempty"`
 	SequenceNumber    *int             `json:"sequence_number,omitempty"`
@@ -78,6 +85,9 @@ func StreamEventsFromInternalResponse(response *InternalLLMResponse) []StreamEve
 	if response == nil {
 		return nil
 	}
+	if len(response.ProtocolEvents) > 0 {
+		return append([]StreamEvent(nil), response.ProtocolEvents...)
+	}
 	if response.Object == "[DONE]" {
 		return []StreamEvent{{Kind: StreamEventKindDone}}
 	}
@@ -85,9 +95,15 @@ func StreamEventsFromInternalResponse(response *InternalLLMResponse) []StreamEve
 		return []StreamEvent{{Kind: StreamEventKindError, ID: response.ID, Model: response.Model, Error: response.Error}}
 	}
 	events := make([]StreamEvent, 0, len(response.Choices)+1)
+	if response.Created != 0 || response.SystemFingerprint != "" || response.ServiceTier != "" || response.ProviderExtensions != nil {
+		events = append(events, StreamEvent{Kind: StreamEventKindMetadata, ID: response.ID, Model: response.Model, Created: response.Created, SystemFingerprint: response.SystemFingerprint, ServiceTier: response.ServiceTier, ProviderExtensions: response.ProviderExtensions})
+	}
 	for _, choice := range response.Choices {
 		if choice.Delta != nil {
 			delta := choice.Delta
+			if delta.Audio != nil || len(delta.Images) > 0 || len(delta.Annotations) > 0 || delta.ProviderExtensions != nil || choice.Logprobs != nil {
+				events = append(events, StreamEvent{Kind: StreamEventKindMessageDelta, ID: response.ID, Model: response.Model, Index: choice.Index, Message: &Message{Audio: delta.Audio, Images: delta.Images, Annotations: delta.Annotations, ProviderExtensions: delta.ProviderExtensions}, Logprobs: choice.Logprobs})
+			}
 			if delta.Role != "" {
 				events = append(events, StreamEvent{Kind: StreamEventKindMessageStart, ID: response.ID, Model: response.Model, Index: choice.Index, Role: delta.Role})
 			}
@@ -130,6 +146,12 @@ func StreamEventsFromInternalResponse(response *InternalLLMResponse) []StreamEve
 			if delta.Refusal != "" {
 				events = append(events, StreamEvent{Kind: StreamEventKindTextDelta, ID: response.ID, Model: response.Model, Index: choice.Index, Delta: &StreamDelta{Refusal: delta.Refusal}})
 			}
+			for _, part := range delta.Content.MultipleContent {
+				for index := range part.Citations {
+					citation := part.Citations[index]
+					events = append(events, StreamEvent{Kind: StreamEventKindCitationDelta, ID: response.ID, Model: response.Model, Index: choice.Index, Citation: &citation})
+				}
+			}
 			for _, toolCall := range delta.ToolCalls {
 				toolCall := toolCall
 				event := StreamEvent{Kind: StreamEventKindToolCallDelta, ID: response.ID, Model: response.Model, Index: choice.Index, ToolCall: &toolCall}
@@ -161,11 +183,32 @@ func InternalResponseFromStreamEvents(events []StreamEvent) *InternalLLMResponse
 	if len(events) == 0 {
 		return nil
 	}
-	response := &InternalLLMResponse{Object: "chat.completion.chunk"}
+	response := &InternalLLMResponse{Object: "chat.completion.chunk", ProtocolEvents: append([]StreamEvent(nil), events...)}
 	choices := make(map[int]*Choice)
 	for _, event := range events {
 		if event.Kind == StreamEventKindDone {
-			return &InternalLLMResponse{Object: "[DONE]"}
+			if len(events) == 1 {
+				response.Object = "[DONE]"
+			}
+			continue
+		}
+		if event.Created != 0 {
+			response.Created = event.Created
+		}
+		if event.SystemFingerprint != "" {
+			response.SystemFingerprint = event.SystemFingerprint
+		}
+		if event.ServiceTier != "" {
+			response.ServiceTier = event.ServiceTier
+		}
+		if event.Status != "" {
+			response.Status = event.Status
+		}
+		if event.IncompleteDetails != nil {
+			response.IncompleteDetails = cloneRawMessage(event.IncompleteDetails)
+		}
+		if event.ProviderExtensions != nil {
+			response.ProviderExtensions = mergeStreamExtensions(response.ProviderExtensions, event.ProviderExtensions)
 		}
 		if event.ID != "" {
 			response.ID = event.ID
@@ -179,7 +222,7 @@ func InternalResponseFromStreamEvents(events []StreamEvent) *InternalLLMResponse
 		if event.ProviderExtensions != nil && event.ProviderExtensions.OpenAI != nil && len(event.ProviderExtensions.OpenAI.RawResponseItems) > 0 {
 			response.RawResponsesOutputItems = event.ProviderExtensions.OpenAI.RawResponseItems
 		}
-		if event.Kind == StreamEventKindUsageDelta {
+		if event.Kind == StreamEventKindUsageDelta || event.Kind == StreamEventKindMetadata || event.Kind == StreamEventKindNativeItem {
 			continue
 		}
 		if event.Kind == StreamEventKindError {
@@ -192,6 +235,10 @@ func InternalResponseFromStreamEvents(events []StreamEvent) *InternalLLMResponse
 			choices[event.Index] = choice
 		}
 		switch event.Kind {
+		case StreamEventKindMessageDelta:
+			merged := Choice{Message: choice.Delta, Logprobs: choice.Logprobs}
+			mergeChoiceDelta(&merged, Choice{Delta: event.Message, Logprobs: event.Logprobs})
+			choice.Delta, choice.Logprobs = merged.Message, merged.Logprobs
 		case StreamEventKindMessageStart:
 			choice.Delta.Role = event.Role
 		case StreamEventKindContentBlockStart:
@@ -203,16 +250,37 @@ func InternalResponseFromStreamEvents(events []StreamEvent) *InternalLLMResponse
 			if event.Delta != nil {
 				if event.Delta.Text != "" {
 					text := event.Delta.Text
+					if choice.Delta.Content.Content != nil {
+						text = *choice.Delta.Content.Content + text
+					}
 					choice.Delta.Content.Content = &text
 				}
 				if event.Delta.Refusal != "" {
-					choice.Delta.Refusal = event.Delta.Refusal
+					choice.Delta.Refusal += event.Delta.Refusal
 				}
+			}
+		case StreamEventKindCitationDelta:
+			if event.Citation != nil {
+				content := choice.Delta.Content
+				if len(content.MultipleContent) == 0 && content.Content != nil {
+					text := *content.Content
+					content.Content = nil
+					content.MultipleContent = append(content.MultipleContent, MessageContentPart{Type: "text", Text: &text})
+				}
+				if len(content.MultipleContent) == 0 {
+					content.MultipleContent = append(content.MultipleContent, MessageContentPart{Type: "text"})
+				}
+				last := len(content.MultipleContent) - 1
+				content.MultipleContent[last].Citations = append(content.MultipleContent[last].Citations, *event.Citation)
+				choice.Delta.Content = content
 			}
 		case StreamEventKindThinkingDelta:
 			if event.Delta != nil && (event.Delta.Thinking != "" || event.Delta.Signature != "") {
 				if event.Delta.Thinking != "" {
 					thinking := event.Delta.Thinking
+					if choice.Delta.ReasoningContent != nil {
+						thinking = *choice.Delta.ReasoningContent + thinking
+					}
 					choice.Delta.ReasoningContent = &thinking
 				}
 				choice.Delta.AppendReasoningBlock(ReasoningBlock{Kind: ReasoningBlockKindThinking, Index: -1, Text: event.Delta.Thinking, Signature: event.Delta.Signature})
@@ -220,8 +288,11 @@ func InternalResponseFromStreamEvents(events []StreamEvent) *InternalLLMResponse
 		case StreamEventKindSignatureDelta:
 			if event.Delta != nil && event.Delta.Signature != "" {
 				signature := event.Delta.Signature
+				if choice.Delta.ReasoningSignature != nil {
+					signature = *choice.Delta.ReasoningSignature + signature
+				}
 				choice.Delta.ReasoningSignature = &signature
-				choice.Delta.AppendReasoningBlock(ReasoningBlock{Kind: ReasoningBlockKindSignature, Index: -1, Signature: signature})
+				choice.Delta.AppendReasoningBlock(ReasoningBlock{Kind: ReasoningBlockKindSignature, Index: -1, Signature: event.Delta.Signature})
 			}
 		case StreamEventKindToolCallStart, StreamEventKindToolCallDelta:
 			if event.ToolCall != nil {
@@ -247,7 +318,14 @@ func InternalResponseFromStreamEvents(events []StreamEvent) *InternalLLMResponse
 	for _, idx := range indices {
 		response.Choices = append(response.Choices, *choices[idx])
 	}
-	if len(response.Choices) == 0 && response.Usage == nil && response.Error == nil {
+	hasNative := false
+	for _, event := range events {
+		if event.NativeItem != nil {
+			hasNative = true
+			break
+		}
+	}
+	if len(response.Choices) == 0 && response.Usage == nil && response.Error == nil && response.Object != "[DONE]" && response.ProviderExtensions == nil && response.Created == 0 && response.SystemFingerprint == "" && response.ServiceTier == "" && response.Status == "" && !hasNative {
 		return nil
 	}
 	return response

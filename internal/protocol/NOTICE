@@ -18,3 +18,11 @@ Network execution, provider platforms, routing and automatic cache optimization
 are excluded. Octopus adaptations use its existing internal IR and transport.
 See LICENSE-LGPL-3.0 for the upstream llm license. Historical MIT-derived
 transformer code retains the separate notice in internal/transformer/NOTICE.
+
+LICENSE-GPL-3.0 supplies the GNU GPL version 3 text incorporated by the LGPL.
+Local adaptations and tests are recorded per source in the manifest. Relocated
+Octopus compatibility files retain their historical attribution; their presence
+in this directory does not relicense their earlier MIT-derived portions.
+Release archives and container images include these notices and the manifest.
+Corresponding modified source is the Octopus revision identified by the build
+and image revision metadata, available from https://github.com/Bduoluoluo/octopus.

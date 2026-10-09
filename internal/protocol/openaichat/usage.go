@@ -18,11 +18,11 @@ type CompletionTokensDetails struct {
 // Usage represents the usage response from OpenAI compatible format.
 // Difference provider may have different format, so we use this to convert to unified format.
 type Usage struct {
-	PromptTokens            int64                   `json:"prompt_tokens"`
-	CompletionTokens        int64                   `json:"completion_tokens"`
-	TotalTokens             int64                   `json:"total_tokens"`
-	PromptTokensDetails     PromptTokensDetails     `json:"prompt_tokens_details"`
-	CompletionTokensDetails CompletionTokensDetails `json:"completion_tokens_details"`
+	PromptTokens            int64                    `json:"prompt_tokens"`
+	CompletionTokens        int64                    `json:"completion_tokens"`
+	TotalTokens             int64                    `json:"total_tokens"`
+	PromptTokensDetails     *PromptTokensDetails     `json:"prompt_tokens_details"`
+	CompletionTokensDetails *CompletionTokensDetails `json:"completion_tokens_details"`
 
 	// ReasoningTokens is a top-level reasoning token count emitted by some
 	// OpenAI-compatible providers (e.g. SGLang) that do not populate the nested

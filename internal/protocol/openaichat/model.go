@@ -13,6 +13,11 @@ const TransformerMetadataKeyCitations = "citations"
 // Request represents an OpenAI chat completion request.
 // This is a clean OpenAI-specific model without helper fields.
 type Request struct {
+	Fields           model.ProtocolFields `json:"-"`
+	N                *int64               `json:"n,omitempty"`
+	Audio            *RequestAudio        `json:"audio,omitempty"`
+	Prediction       json.RawMessage      `json:"prediction,omitempty"`
+	WebSearchOptions json.RawMessage      `json:"web_search_options,omitempty"`
 	// Messages is a list of messages to send to the model.
 	Messages []Message `json:"messages" validator:"required,min=1"`
 
@@ -106,6 +111,11 @@ type Thinking struct {
 	Type string `json:"type"`
 }
 
+type RequestAudio = struct {
+	Format string `json:"format,omitempty"`
+	Voice  string `json:"voice,omitempty"`
+}
+
 // StreamOptions for streaming responses.
 type StreamOptions struct {
 	IncludeUsage bool `json:"include_usage,omitempty"`
@@ -157,6 +167,9 @@ func (s *Stop) UnmarshalJSON(data []byte) error {
 
 // Message represents a message in the conversation.
 type Message struct {
+	Fields             model.ProtocolFields `json:"-"`
+	Images             []MessageContentPart `json:"images,omitempty"`
+	ReasoningSignature *string              `json:"reasoning_signature,omitempty"`
 	// user, assistant, system, tool, developer
 	Role string `json:"role,omitempty"`
 	// Content of the message.
@@ -188,6 +201,7 @@ type Message struct {
 
 // Annotation represents a citation or reference annotation in a message.
 type Annotation struct {
+	Fields model.ProtocolFields `json:"-"`
 	// Type is the type of annotation, e.g., "url_citation"
 	Type string `json:"type,omitempty"`
 	// StartIndex is the start byte offset of the annotated span in the message content.
@@ -200,6 +214,7 @@ type Annotation struct {
 
 // URLCitation represents a URL-based citation.
 type URLCitation struct {
+	Fields model.ProtocolFields `json:"-"`
 	// URL is the citation URL
 	URL string `json:"url,omitempty"`
 	// Title is the title of the cited source
@@ -215,11 +230,7 @@ type MessageContent struct {
 }
 
 func (c MessageContent) MarshalJSON() ([]byte, error) {
-	if len(c.MultipleContent) > 0 {
-		if len(c.MultipleContent) == 1 && c.MultipleContent[0].Type == "text" {
-			return json.Marshal(c.MultipleContent[0].Text)
-		}
-
+	if c.MultipleContent != nil {
 		return json.Marshal(c.MultipleContent)
 	}
 
@@ -259,12 +270,13 @@ func (c *MessageContent) UnmarshalJSON(data []byte) error {
 
 // MessageContentPart represents different types of content (text, image, video, etc.)
 type MessageContentPart struct {
-	Type       string      `json:"type"`
-	Text       *string     `json:"text,omitempty"`
-	ImageURL   *ImageURL   `json:"image_url,omitempty"`
-	VideoURL   *VideoURL   `json:"video_url,omitempty"`
-	InputAudio *InputAudio `json:"input_audio,omitempty"`
-	File       *File       `json:"file,omitempty"`
+	Fields     model.ProtocolFields `json:"-"`
+	Type       string               `json:"type"`
+	Text       *string              `json:"text,omitempty"`
+	ImageURL   *ImageURL            `json:"image_url,omitempty"`
+	VideoURL   *VideoURL            `json:"video_url,omitempty"`
+	InputAudio *InputAudio          `json:"input_audio,omitempty"`
+	File       *File                `json:"file,omitempty"`
 }
 
 type File struct {
@@ -309,12 +321,13 @@ type ResponseFormat struct {
 
 // Response represents an OpenAI chat completion response.
 type Response struct {
-	ID      string   `json:"id"`
-	Choices []Choice `json:"choices"`
-	Object  string   `json:"object"`
-	Created int64    `json:"created"`
-	Model   string   `json:"model"`
-	Usage   *Usage   `json:"usage"`
+	Fields  model.ProtocolFields `json:"-"`
+	ID      string               `json:"id"`
+	Choices []Choice             `json:"choices"`
+	Object  string               `json:"object"`
+	Created int64                `json:"created"`
+	Model   string               `json:"model"`
+	Usage   *Usage               `json:"usage"`
 
 	SystemFingerprint string `json:"system_fingerprint,omitempty"`
 	ServiceTier       string `json:"service_tier,omitempty"`
@@ -362,35 +375,40 @@ type OpenAIError struct {
 
 // Tool represents a function tool.
 type Tool struct {
-	Type     string   `json:"type"`
-	Function Function `json:"function"`
+	Fields   model.ProtocolFields `json:"-"`
+	Type     string               `json:"type"`
+	Function Function             `json:"function"`
 }
 
 // ToLLMTool converts OpenAI Tool to unified model.Tool.
 func (t Tool) ToLLMTool() model.Tool {
 	return model.Tool{
-		Type: t.Type,
+		ProviderExtensions: chatExtensions(t.Fields),
+		Type:               t.Type,
 		Function: model.Function{
-			Name:        t.Function.Name,
-			Description: t.Function.Description,
-			Parameters:  t.Function.Parameters,
-			Strict:      t.Function.Strict,
+			ProviderExtensions: chatExtensions(t.Function.Fields),
+			Name:               t.Function.Name,
+			Description:        t.Function.Description,
+			Parameters:         t.Function.Parameters,
+			Strict:             t.Function.Strict,
 		},
 	}
 }
 
 // Function represents a function definition.
 type Function struct {
-	Name        string          `json:"name"`
-	Description string          `json:"description,omitempty"`
-	Parameters  json.RawMessage `json:"parameters"`
-	Strict      *bool           `json:"strict,omitempty"`
+	Fields      model.ProtocolFields `json:"-"`
+	Name        string               `json:"name"`
+	Description string               `json:"description,omitempty"`
+	Parameters  json.RawMessage      `json:"parameters"`
+	Strict      *bool                `json:"strict,omitempty"`
 }
 
 // FunctionCall represents a function call.
 type FunctionCall struct {
-	Name      string `json:"name,omitempty"`
-	Arguments string `json:"arguments"`
+	Fields    model.ProtocolFields `json:"-"`
+	Name      string               `json:"name,omitempty"`
+	Arguments string               `json:"arguments"`
 }
 
 // ToolCallExtraContent represents provider-specific extension fields for tool calls.
@@ -405,10 +423,11 @@ type ToolCallExtraFields struct {
 
 // ToolCall represents a tool call in the response.
 type ToolCall struct {
-	ID       string       `json:"id,omitempty"`
-	Type     string       `json:"type,omitempty"`
-	Function FunctionCall `json:"function"`
-	Index    int          `json:"index"`
+	Fields   model.ProtocolFields `json:"-"`
+	ID       string               `json:"id,omitempty"`
+	Type     string               `json:"type,omitempty"`
+	Function FunctionCall         `json:"function"`
+	Index    int                  `json:"index"`
 	// ExtraContent carries provider-specific extension fields, such as Gemini OpenAI thought signature.
 	ExtraContent *ToolCallExtraContent `json:"extra_content,omitempty"`
 	// ExtraFields is a compatibility wrapper for payloads that nest extra_content under extra_fields.

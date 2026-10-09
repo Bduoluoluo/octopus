@@ -13,6 +13,37 @@ type StreamFrame struct {
 
 type ProtocolFields map[string]json.RawMessage
 
+type Annotation struct {
+	Fields      ProtocolFields `json:"-"`
+	Type        string         `json:"type,omitempty"`
+	StartIndex  *int64         `json:"start_index,omitempty"`
+	EndIndex    *int64         `json:"end_index,omitempty"`
+	URLCitation *URLCitation   `json:"url_citation,omitempty"`
+}
+
+type URLCitation struct {
+	Fields ProtocolFields `json:"-"`
+	URL    string         `json:"url,omitempty"`
+	Title  string         `json:"title,omitempty"`
+}
+
+type VideoURL struct {
+	URL string `json:"url"`
+}
+
+type OutputAudio = struct {
+	Data       string `json:"data,omitempty"`
+	ExpiresAt  int64  `json:"expires_at,omitempty"`
+	ID         string `json:"id,omitempty"`
+	Transcript string `json:"transcript,omitempty"`
+}
+
+type ToolOption struct {
+	Type      string `json:"type"`
+	Name      string `json:"name,omitempty"`
+	Namespace string `json:"namespace,omitempty"`
+}
+
 type ProtocolExtension struct {
 	Fields ProtocolFields `json:"fields,omitempty"`
 	Items  []ProtocolItem `json:"items,omitempty"`

@@ -26,6 +26,7 @@ type ImageGeneration struct {
 }
 
 type Tool struct {
+	Fields model.ProtocolFields `json:"-"`
 	// Any of "function", "image_generation", "custom", "web_search", "namespace".
 	Type        string `json:"type,omitempty"`
 	Name        string `json:"name,omitempty"`
@@ -95,10 +96,11 @@ type CustomToolFormat struct {
 // Request is a struct for OpenAI Responses API creation.
 // Reference: github.com/openai/openai-go/v2/responses.ResponseNewParams.
 type Request struct {
-	Model string `json:"model"`
+	EncodeError error  `json:"-"`
+	Model       string `json:"model"`
 
 	// A system (or developer) message inserted into the model's context.
-	Instructions string `json:"instructions"`
+	Instructions string `json:"instructions,omitempty"`
 
 	Temperature *float64 `json:"temperature,omitempty"`
 
@@ -143,7 +145,11 @@ type Request struct {
 	Reasoning *Reasoning `json:"reasoning,omitempty"`
 
 	// Options for streaming responses.
-	StreamOptions *StreamOptions `json:"stream_options,omitempty"`
+	StreamOptions     json.RawMessage      `json:"stream_options,omitempty"`
+	Prompt            json.RawMessage      `json:"prompt,omitempty"`
+	Conversation      json.RawMessage      `json:"conversation,omitempty"`
+	ContextManagement json.RawMessage      `json:"context_management,omitempty"`
+	Fields            model.ProtocolFields `json:"-"`
 
 	// How the model should select which tool to use.
 	ToolChoice *ToolChoice `json:"tool_choice,omitempty"`
@@ -176,9 +182,9 @@ type Reasoning struct {
 	// The effort level for reasoning. Any of "low", "medium", "high".
 	Effort string `json:"effort,omitempty"`
 	// Whether to generate a summary of the reasoning. Any of "auto", "concise", "detailed".
-	GenerateSummary string `json:"generate_summary,omitempty"`
+	GenerateSummary *string `json:"generate_summary,omitempty"`
 	// The summary type. Any of "auto", "concise", "detailed".
-	Summary string `json:"summary,omitempty"`
+	Summary *string `json:"summary,omitempty"`
 	// Maximum number of reasoning tokens.
 	MaxTokens *int64 `json:"max_tokens,omitempty"`
 }
@@ -191,6 +197,8 @@ type StreamOptions struct {
 
 // ToolChoice represents how the model should select which tool to use (for requests).
 type ToolChoice struct {
+	Fields    model.ProtocolFields `json:"-"`
+	Namespace *string              `json:"namespace,omitempty"`
 	// Mode can be "none", "auto", "required".
 	Mode *string `json:"mode,omitempty"`
 	// Type for specific tool choice. Any of "function", "file_search", "web_search", "shell" etc.
@@ -219,6 +227,9 @@ func (t *ToolChoice) UnmarshalJSON(data []byte) error {
 	tc, err := xjson.To[ToolChoiceAlias](data)
 	if err == nil {
 		*t = ToolChoice(tc)
+		if err := json.Unmarshal(data, &t.Fields); err != nil {
+			return err
+		}
 		return nil
 	}
 
@@ -230,7 +241,11 @@ func (t *ToolChoice) MarshalJSON() ([]byte, error) {
 		return json.Marshal(*t.Mode)
 	}
 
-	return json.Marshal((*ToolChoiceAlias)(t))
+	body, err := json.Marshal((*ToolChoiceAlias)(t))
+	if err != nil {
+		return nil, err
+	}
+	return mergeUnknownFields(body, t.Fields, *t)
 }
 
 // ResponseToolChoice represents tool_choice in responses, which can be a string or object.
@@ -339,9 +354,14 @@ type Input struct {
 	// If both are populated, Text takes precedence during marshaling.
 	Text  *string
 	Items []Item
+	Raw   json.RawMessage
 }
 
 func (i *Input) UnmarshalJSON(data []byte) error {
+	*i = Input{}
+	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
+		return nil
+	}
 	var text string
 	if err := json.Unmarshal(data, &text); err == nil {
 		i.Text = &text
@@ -362,6 +382,9 @@ func (i *Input) UnmarshalJSON(data []byte) error {
 }
 
 func (i Input) MarshalJSON() ([]byte, error) {
+	if len(i.Raw) > 0 {
+		return json.Marshal(i.Raw)
+	}
 	if i.Text != nil {
 		return json.Marshal(i.Text)
 	}
@@ -370,6 +393,11 @@ func (i Input) MarshalJSON() ([]byte, error) {
 }
 
 type Annotation struct {
+	Fields   model.ProtocolFields `json:"-"`
+	URL      *string              `json:"url,omitempty"`
+	Title    *string              `json:"title,omitempty"`
+	FileID   *string              `json:"file_id,omitempty"`
+	Filename *string              `json:"filename,omitempty"`
 	// Type is the type of annotation, e.g., "url_citation".
 	Type string `json:"type,omitempty"`
 	// StartIndex is the start offset of the annotated span in the output text.
@@ -395,6 +423,10 @@ func (a *Annotation) UnmarshalJSON(data []byte) error {
 	}
 
 	*a = Annotation(raw.rawAnnotation)
+	a.URL, a.Title = raw.URL, raw.Title
+	if err := json.Unmarshal(data, &a.Fields); err != nil {
+		return err
+	}
 	if a.URLCitation == nil && (raw.URL != nil || raw.Title != nil) {
 		a.URLCitation = &URLCitation{}
 		if raw.URL != nil {
@@ -513,6 +545,10 @@ func (a ItemAction) MarshalJSON() ([]byte, error) {
 // This follows the openai-go pattern where input and output items share the same structure.
 // Reference: github.com/openai/openai-go/v3/responses.ResponseOutputItemUnion.
 type Item struct {
+	Fields        model.ProtocolFields `json:"-"`
+	Refusal       *string              `json:"refusal,omitempty"`
+	InputAudio    *InputAudio          `json:"input_audio,omitempty"`
+	ItemReference *string              `json:"item_reference,omitempty"`
 	// The ID of the item, generated by the server.
 	ID string `json:"id,omitempty"`
 
@@ -605,6 +641,9 @@ func (item *Item) UnmarshalJSON(data []byte) error {
 	}
 
 	*item = Item(raw.itemAlias)
+	if err := json.Unmarshal(data, &item.Fields); err != nil {
+		return err
+	}
 	if len(raw.Arguments) == 0 || bytes.Equal(raw.Arguments, []byte("null")) {
 		return nil
 	}
@@ -626,6 +665,14 @@ func (item *Item) UnmarshalJSON(data []byte) error {
 
 // MarshalJSON omits summary for non-reasoning items and forces an empty array for reasoning items.
 func (item Item) MarshalJSON() ([]byte, error) {
+	body, err := item.marshalKnownJSON()
+	if err != nil {
+		return nil, err
+	}
+	return mergeUnknownFields(body, item.Fields, item)
+}
+
+func (item Item) marshalKnownJSON() ([]byte, error) {
 	type itemAlias Item
 
 	if item.Type == "function_call" {
@@ -701,7 +748,7 @@ func (item Item) MarshalJSON() ([]byte, error) {
 }
 
 // isOutputMessageContent checks if Content.Items contains output message content items.
-func (item Item) isOutputMessageContent() bool {
+func (item Item) IsOutputMessageContent() bool {
 	if item.Content == nil || len(item.Content.Items) == 0 {
 		return false
 	}
@@ -809,6 +856,7 @@ type ReasoningContent struct {
 }
 
 type Response struct {
+	Fields model.ProtocolFields `json:"-"`
 	// The object type of this resource - always set to "response".
 	Object string `json:"object"`
 	// Unique identifier for this Response.
@@ -918,7 +966,10 @@ func (r *Response) UnmarshalJSON(data []byte) error {
 		return err
 	}
 
-	if xjson.IsNull(raw.CreatedAt) {
+	if err := json.Unmarshal(data, &r.Fields); err != nil {
+		return err
+	}
+	if len(raw.CreatedAt) == 0 || xjson.IsNull(raw.CreatedAt) {
 		return nil
 	}
 

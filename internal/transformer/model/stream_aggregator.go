@@ -43,8 +43,32 @@ func (a *StreamAggregator) Response() *InternalLLMResponse {
 		if chunk.Model != "" {
 			result.Model = chunk.Model
 		}
+		if chunk.Created != 0 {
+			result.Created = chunk.Created
+		}
+		if chunk.SystemFingerprint != "" {
+			result.SystemFingerprint = chunk.SystemFingerprint
+		}
+		if chunk.ServiceTier != "" {
+			result.ServiceTier = chunk.ServiceTier
+		}
+		if chunk.Status != "" {
+			result.Status = chunk.Status
+		}
+		if chunk.IncompleteDetails != nil {
+			result.IncompleteDetails = cloneRawMessage(chunk.IncompleteDetails)
+		}
+		if chunk.ProviderExtensions != nil {
+			result.ProviderExtensions = mergeStreamExtensions(result.ProviderExtensions, chunk.ProviderExtensions)
+		}
 		if chunk.Usage != nil {
 			result.Usage = chunk.Usage
+		}
+		if len(chunk.RawResponsesOutputItems) > 0 {
+			result.RawResponsesOutputItems = cloneRawMessage(chunk.RawResponsesOutputItems)
+		}
+		if chunk.Error != nil {
+			result.Error = chunk.Error
 		}
 		for _, choice := range chunk.Choices {
 			existingChoice := choicesMap[choice.Index]
@@ -65,6 +89,9 @@ func (a *StreamAggregator) Response() *InternalLLMResponse {
 	for _, idx := range indices {
 		result.Choices = append(result.Choices, *choicesMap[idx])
 	}
+	if err := applyCitationBlocks(result, a.chunks); err != nil && result.Error == nil {
+		result.Error = &ResponseError{StatusCode: 502, Detail: ErrorDetail{Type: "protocol_aggregation_error", Message: err.Error()}}
+	}
 	return result
 }
 
@@ -77,6 +104,10 @@ func (a *StreamAggregator) BuildAndReset() *InternalLLMResponse {
 func mergeChoiceDelta(existingChoice *Choice, choice Choice) {
 	if choice.Delta != nil {
 		delta := choice.Delta
+		existingChoice.Message.Annotations = append(existingChoice.Message.Annotations, delta.Annotations...)
+		if delta.ProviderExtensions != nil {
+			existingChoice.Message.ProviderExtensions = mergeStreamExtensions(existingChoice.Message.ProviderExtensions, delta.ProviderExtensions)
+		}
 		if delta.Role != "" {
 			existingChoice.Message.Role = delta.Role
 		}
@@ -120,8 +151,19 @@ func mergeChoiceDelta(existingChoice *Choice, choice Choice) {
 			existingChoice.Message.ToolCalls = MergeToolCallDelta(existingChoice.Message.ToolCalls, toolCall)
 		}
 		if delta.Refusal != "" {
-			existingChoice.Message.Refusal = delta.Refusal
+			existingChoice.Message.Refusal += delta.Refusal
 		}
+		if delta.ReasoningSignature != nil {
+			if existingChoice.Message.ReasoningSignature == nil {
+				existingChoice.Message.ReasoningSignature = new(string)
+			}
+			*existingChoice.Message.ReasoningSignature += *delta.ReasoningSignature
+		}
+		existingChoice.Message.ReasoningBlocks = append(existingChoice.Message.ReasoningBlocks, delta.ReasoningBlocks...)
+		existingChoice.Message.RedactedThinkingBlocks = append(existingChoice.Message.RedactedThinkingBlocks, delta.RedactedThinkingBlocks...)
+	}
+	if choice.StopSequence != nil {
+		existingChoice.StopSequence = choice.StopSequence
 	}
 	if choice.FinishReason != nil {
 		existingChoice.FinishReason = choice.FinishReason
@@ -137,6 +179,12 @@ func mergeChoiceDelta(existingChoice *Choice, choice Choice) {
 func MergeToolCallDelta(toolCalls []ToolCall, delta ToolCall) []ToolCall {
 	for i, tc := range toolCalls {
 		if tc.Index == delta.Index {
+			if delta.ProviderExtensions != nil {
+				toolCalls[i].ProviderExtensions = CloneProviderExtensions(delta.ProviderExtensions)
+			}
+			if delta.ThoughtSignature != "" {
+				toolCalls[i].ThoughtSignature = delta.ThoughtSignature
+			}
 			if delta.ID != "" {
 				toolCalls[i].ID = delta.ID
 			}

@@ -102,7 +102,7 @@ type InternalLLMRequest struct {
 	// you will be charged based on the number of generated tokens across all of the
 	// choices. Keep `n` as `1` to minimize costs.
 	// NOTE: Not supported, always 1.
-	// N *int64 `json:"n,omitempty"`
+	N *int64 `json:"n,omitempty"`
 
 	// Number between -2.0 and 2.0. Positive values penalize new tokens based on
 	// whether they appear in the text so far, increasing the model's likelihood to
@@ -733,7 +733,8 @@ type ThinkingConfig struct {
 
 // Message represents a message in the conversation.
 type Message struct {
-	Role string `json:"role,omitempty"`
+	Annotations []Annotation `json:"annotations,omitempty"`
+	Role        string       `json:"role,omitempty"`
 	// Content of the message.
 	// string or []ContentPart, be careful about the omitzero tag, it required.
 	// Some framework may depended on the behavior, we should not response the field if not present.
@@ -997,6 +998,9 @@ func (c *MessageContent) UnmarshalJSON(data []byte) error {
 
 // MessageContentPart represents different types of content (text, image, etc.)
 type MessageContentPart struct {
+	VideoURL  *VideoURL         `json:"video_url,omitempty"`
+	Citations []ContentCitation `json:"-"`
+	Native    *ProtocolItem     `json:"-"`
 	// Type is the type of the content part.
 	// e.g. "text", "image_url", "input_audio", "file", "document",
 	// "server_tool_use", "server_tool_result".
@@ -1292,7 +1296,12 @@ func (r ResponseFormat) MarshalJSON() ([]byte, error) {
 // And other llm provider should convert the response to this format.
 // NOTE: the OpenAI stream and non-stream response reuse same struct.
 type InternalLLMResponse struct {
-	ID string `json:"id"`
+	ChatCitations      []string            `json:"citations,omitempty"`
+	ProtocolEvents     []StreamEvent       `json:"-"`
+	ProviderExtensions *ProviderExtensions `json:"-"`
+	Status             string              `json:"-"`
+	IncompleteDetails  json.RawMessage     `json:"-"`
+	ID                 string              `json:"id"`
 
 	// RawResponsesOutputItems preserves exact OpenAI Responses output items when available.
 	// It is an internal helper field for exact replay reconstruction and is not part of API output.
@@ -1659,8 +1668,9 @@ type CompletionTokensDetails struct {
 
 // PromptTokensDetails Breakdown of tokens used in the prompt.
 type PromptTokensDetails struct {
-	AudioTokens  int64 `json:"audio_tokens"`
-	CachedTokens int64 `json:"cached_tokens"`
+	WriteCachedTokens int64 `json:"write_cached_tokens,omitempty"`
+	AudioTokens       int64 `json:"audio_tokens"`
+	CachedTokens      int64 `json:"cached_tokens"`
 	// TextTokens / ImageTokens / VideoTokens / DocumentTokens are populated
 	// when upstream providers (Gemini today) report per-modality input breakdowns.
 	TextTokens     int64 `json:"text_tokens,omitempty"`
@@ -1722,6 +1732,7 @@ type ModalityTokenCount struct {
 
 // Tool represents a function tool.
 type Tool struct {
+	ProviderExtensions *ProviderExtensions `json:"-"`
 	// Type is the type of the tool.
 	// Any of "function", "image_generation".
 	Type            string           `json:"type"`
@@ -1783,14 +1794,16 @@ type toolJSONMarshaller Tool
 
 // Function represents a function definition.
 type Function struct {
-	Name        string          `json:"name"`
-	Description string          `json:"description,omitempty"`
-	Parameters  json.RawMessage `json:"parameters"`
-	Strict      *bool           `json:"strict,omitempty"`
+	ProviderExtensions *ProviderExtensions `json:"-"`
+	Name               string              `json:"name"`
+	Description        string              `json:"description,omitempty"`
+	Parameters         json.RawMessage     `json:"parameters"`
+	Strict             *bool               `json:"strict,omitempty"`
 }
 
 // FunctionCall represents a function call (deprecated).
 type FunctionCall struct {
+	ProviderExtensions *ProviderExtensions `json:"-"`
 	// The name of the function to call.
 	Name string `json:"name"`
 
@@ -1834,6 +1847,7 @@ type ToolFunction struct {
 //
 // Tool choice can be a string or a struct.
 type ToolChoice struct {
+	Tools           []ToolOption     `json:"tools,omitempty"`
 	ToolChoice      *string          `json:"tool_choice,omitempty"`
 	NamedToolChoice *NamedToolChoice `json:"named_tool_choice,omitempty"`
 }

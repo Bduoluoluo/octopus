@@ -1,0 +1,287 @@
+{
+  "baseline": "98c380bc205b673f3f9c42100ba68397df7a9947",
+  "method": "rg word-boundary lexical references in production Go files; includes declarations, excludes tests; key compatibility symbols and single IR",
+  "symbols": [
+    {
+      "symbol": "ConvertToResponsesRequest",
+      "references": [
+        "internal/protocol/openairesponses/outbound/response.go",
+        "internal/relay/relay_forward.go",
+        "internal/relay/ws_passthrough.go",
+        "internal/transformer/outbound/openai/response_facade.go"
+      ]
+    },
+    {
+      "symbol": "MarshalResponsesInputItems",
+      "references": [
+        "internal/protocol/openairesponses/outbound/response.go",
+        "internal/relay/ws_session.go",
+        "internal/transformer/outbound/openai/response_facade.go"
+      ]
+    },
+    {
+      "symbol": "ResponsesItem",
+      "references": [
+        "internal/protocol/openairesponses/inbound/extensions.go",
+        "internal/protocol/openairesponses/inbound/response.go",
+        "internal/protocol/openairesponses/outbound/response.go",
+        "internal/protocol/openairesponses/outbound/stream.go",
+        "internal/relay/compact.go",
+        "internal/transformer/inbound/openai/response_facade.go",
+        "internal/transformer/outbound/openai/response_facade.go"
+      ]
+    },
+    {
+      "symbol": "ResponsesUsage",
+      "references": [
+        "internal/protocol/openairesponses/inbound/response.go",
+        "internal/protocol/openairesponses/outbound/response.go",
+        "internal/relay/compact.go",
+        "internal/transformer/inbound/openai/response_facade.go",
+        "internal/transformer/outbound/openai/response_facade.go"
+      ]
+    },
+    {
+      "symbol": "TransformStreamFrame",
+      "references": [
+        "internal/protocol/anthropic/outbound/messages.go",
+        "internal/protocol/anthropic/outbound/stream.go",
+        "internal/protocol/openaichat/outbound/chat.go",
+        "internal/protocol/openairesponses/outbound/response.go",
+        "internal/protocol/openairesponses/outbound/stream.go",
+        "internal/relay/relay_stream.go",
+        "internal/transformer/model/interface.go"
+      ]
+    },
+    {
+      "symbol": "EndStream",
+      "references": [
+        "internal/protocol/anthropic/outbound/stream.go",
+        "internal/protocol/openaichat/outbound/chat.go",
+        "internal/protocol/openairesponses/outbound/stream.go",
+        "internal/relay/relay_stream.go",
+        "internal/transformer/model/interface.go"
+      ]
+    },
+    {
+      "symbol": "CloseStream",
+      "references": [
+        "internal/protocol/anthropic/outbound/stream.go",
+        "internal/protocol/openaichat/outbound/chat.go",
+        "internal/protocol/openairesponses/outbound/stream.go",
+        "internal/relay/relay_stream.go",
+        "internal/transformer/model/interface.go"
+      ]
+    },
+    {
+      "symbol": "ResetStream",
+      "references": [
+        "internal/protocol/anthropic/inbound/messages.go",
+        "internal/protocol/anthropic/inbound/stream.go",
+        "internal/protocol/openairesponses/inbound/extensions.go",
+        "internal/protocol/openairesponses/inbound/response.go",
+        "internal/protocol/openairesponses/outbound/response.go",
+        "internal/protocol/openairesponses/outbound/stream.go",
+        "internal/relay/relay_stream.go",
+        "internal/transformer/inbound/openai/chat.go",
+        "internal/transformer/model/interface.go"
+      ]
+    },
+    {
+      "symbol": "GetInternalResponse",
+      "references": [
+        "internal/protocol/anthropic/inbound/messages.go",
+        "internal/protocol/openairesponses/inbound/response.go",
+        "internal/relay/relay.go",
+        "internal/relay/relay_stream.go",
+        "internal/transformer/inbound/openai/chat.go",
+        "internal/transformer/model/interface.go"
+      ]
+    },
+    {
+      "symbol": "SetOpenAIResponsesOptions",
+      "references": [
+        "internal/protocol/openairesponses/inbound/response.go",
+        "internal/relay/ws_session.go",
+        "internal/transformer/model/extension.go"
+      ]
+    },
+    {
+      "symbol": "GetOpenAIResponsesOptions",
+      "references": [
+        "internal/protocol/openairesponses/outbound/response.go",
+        "internal/relay/ws_error.go",
+        "internal/relay/ws_session.go",
+        "internal/transformer/model/extension.go"
+      ]
+    },
+    {
+      "symbol": "SetOpenAIRawInputItems",
+      "references": [
+        "internal/protocol/openairesponses/inbound/extensions.go",
+        "internal/protocol/openairesponses/inbound/response.go",
+        "internal/relay/ws_session.go",
+        "internal/transformer/model/extension.go"
+      ]
+    },
+    {
+      "symbol": "OpenAIRawInputItems",
+      "references": [
+        "internal/protocol/openairesponses/inbound/response.go",
+        "internal/protocol/openairesponses/outbound/extensions.go",
+        "internal/protocol/openairesponses/outbound/response.go",
+        "internal/relay/ws_session.go",
+        "internal/transformer/model/extension.go"
+      ]
+    },
+    {
+      "symbol": "CanPassthrough",
+      "references": [
+        "internal/protocol/anthropic/outbound/messages.go",
+        "internal/protocol/openairesponses/outbound/response.go",
+        "internal/relay/relay_forward.go",
+        "internal/transformer/model/interface.go"
+      ]
+    },
+    {
+      "symbol": "TransformRequestRaw",
+      "references": [
+        "internal/protocol/anthropic/outbound/messages.go",
+        "internal/protocol/openairesponses/outbound/response.go",
+        "internal/relay/relay_forward.go",
+        "internal/transformer/model/interface.go"
+      ]
+    },
+    {
+      "symbol": "PassthroughConfig",
+      "references": [
+        "internal/protocol/anthropic/outbound/messages.go",
+        "internal/protocol/openairesponses/outbound/response.go",
+        "internal/relay/relay.go",
+        "internal/relay/relay_forward.go",
+        "internal/relay/relay_stream.go",
+        "internal/transformer/model/interface.go"
+      ]
+    },
+    {
+      "symbol": "IsChatChannelType",
+      "references": [
+        "internal/helper/prompt_suffix.go",
+        "internal/relay/relay.go",
+        "internal/relay/ws_client.go",
+        "internal/transformer/outbound/register.go"
+      ]
+    },
+    {
+      "symbol": "IsEmbeddingChannelType",
+      "references": [
+        "internal/relay/relay.go",
+        "internal/transformer/outbound/register.go"
+      ]
+    },
+    {
+      "symbol": "ChatCompletionsRequest",
+      "references": [
+        "internal/protocol/openaichat/outbound/chat.go",
+        "internal/transformer/outbound/openai/chat_facade.go"
+      ]
+    },
+    {
+      "symbol": "DefaultAnthropicPassthroughBeta",
+      "references": [
+        "internal/protocol/anthropic/outbound/messages.go",
+        "internal/transformer/outbound/anthropic/facade.go"
+      ]
+    },
+    {
+      "symbol": "InternalLLMRequest",
+      "references": [
+        "internal/grouphealth/probe.go",
+        "internal/protocol/anthropic/inbound/messages.go",
+        "internal/protocol/anthropic/outbound/messages.go",
+        "internal/protocol/anthropic/outbound/native.go",
+        "internal/protocol/openaichat/codec.go",
+        "internal/protocol/openaichat/inbound_convert.go",
+        "internal/protocol/openaichat/outbound/chat.go",
+        "internal/protocol/openaichat/outbound_convert.go",
+        "internal/protocol/openairesponses/inbound/extensions.go",
+        "internal/protocol/openairesponses/inbound/response.go",
+        "internal/protocol/openairesponses/outbound/extensions.go",
+        "internal/protocol/openairesponses/outbound/headers.go",
+        "internal/protocol/openairesponses/outbound/response.go",
+        "internal/relay/compact.go",
+        "internal/relay/metrics.go",
+        "internal/relay/relay.go",
+        "internal/relay/relay_forward.go",
+        "internal/relay/responses_replay_store.go",
+        "internal/relay/type.go",
+        "internal/relay/ws_client.go",
+        "internal/relay/ws_error.go",
+        "internal/relay/ws_session.go",
+        "internal/transformer/compat/tool_calls.go",
+        "internal/transformer/inbound/openai/chat.go",
+        "internal/transformer/model/alternation.go",
+        "internal/transformer/model/extension.go",
+        "internal/transformer/model/interface.go",
+        "internal/transformer/model/model.go",
+        "internal/transformer/model/protocol.go",
+        "internal/transformer/outbound/openai/response_facade.go"
+      ]
+    },
+    {
+      "symbol": "InternalLLMResponse",
+      "references": [
+        "internal/protocol/anthropic/inbound/messages.go",
+        "internal/protocol/anthropic/outbound/messages.go",
+        "internal/protocol/openaichat/codec.go",
+        "internal/protocol/openaichat/inbound_convert.go",
+        "internal/protocol/openaichat/outbound/chat.go",
+        "internal/protocol/openaichat/outbound_convert.go",
+        "internal/protocol/openaichat/stream.go",
+        "internal/protocol/openairesponses/inbound/extensions.go",
+        "internal/protocol/openairesponses/inbound/response.go",
+        "internal/protocol/openairesponses/outbound/output.go",
+        "internal/protocol/openairesponses/outbound/response.go",
+        "internal/relay/cancel.go",
+        "internal/relay/compact.go",
+        "internal/relay/metrics.go",
+        "internal/relay/relay_stream.go",
+        "internal/relay/ws_passthrough.go",
+        "internal/relay/ws_session.go",
+        "internal/transformer/inbound/openai/chat.go",
+        "internal/transformer/model/gemini.go",
+        "internal/transformer/model/interface.go",
+        "internal/transformer/model/model.go",
+        "internal/transformer/model/stream_aggregator.go",
+        "internal/transformer/model/stream_citations.go",
+        "internal/transformer/model/stream_event.go"
+      ]
+    },
+    {
+      "symbol": "StreamEvent",
+      "references": [
+        "internal/protocol/anthropic/fields.go",
+        "internal/protocol/anthropic/inbound/model.go",
+        "internal/protocol/anthropic/inbound/stream.go",
+        "internal/protocol/anthropic/model.go",
+        "internal/protocol/anthropic/outbound/messages.go",
+        "internal/protocol/anthropic/outbound/stream.go",
+        "internal/protocol/openaichat/outbound/chat.go",
+        "internal/protocol/openaichat/stream.go",
+        "internal/protocol/openairesponses/inbound/extensions.go",
+        "internal/protocol/openairesponses/inbound/response.go",
+        "internal/protocol/openairesponses/outbound/response.go",
+        "internal/protocol/openairesponses/outbound/stream.go",
+        "internal/protocol/openairesponses/stream_event.go",
+        "internal/protocol/wire/frame.go",
+        "internal/relay/relay_stream.go",
+        "internal/transformer/inbound/anthropic/facade.go",
+        "internal/transformer/inbound/openai/chat.go",
+        "internal/transformer/model/interface.go",
+        "internal/transformer/model/model.go",
+        "internal/transformer/model/stream_citations.go",
+        "internal/transformer/model/stream_event.go"
+      ]
+    }
+  ]
+}
