@@ -135,20 +135,20 @@ func TestStreamReasoningBlocksSingleSignature(t *testing.T) {
 		chunkWithFinish("claude", "stop"),
 	}
 
-	events := feedStream(t, chunks)
-
-	item := findItemDone(events, "reasoning")
-	if item == nil {
-		t.Fatalf("reasoning item.done not found; got %v", eventTypes(events))
+	encoder := &ResponseInbound{}
+	rejected := false
+	for _, chunk := range chunks {
+		encoded, err := encoder.TransformStream(context.Background(), chunk)
+		if err != nil {
+			if len(encoded) != 0 {
+				t.Fatal("opaque payload emitted before rejection")
+			}
+			rejected = true
+			break
+		}
 	}
-	if item.EncryptedContent == nil || *item.EncryptedContent != "sigA" {
-		t.Fatalf("expected encrypted_content=\"sigA\", got %v", item.EncryptedContent)
-	}
-	if findEvent(events, "response.reasoning.delta") == nil {
-		t.Fatalf("expected response.reasoning.delta, got %v", eventTypes(events))
-	}
-	if done := findEvent(events, "response.reasoning.done"); done == nil || done.Text != "thinking..." {
-		t.Fatalf("expected response.reasoning.done with full text, got %+v", done)
+	if !rejected {
+		t.Fatal("foreign opaque reasoning accepted")
 	}
 }
 
@@ -173,18 +173,20 @@ func TestStreamReasoningBlocksMultipleSignatures(t *testing.T) {
 		chunkWithFinish("claude", "stop"),
 	}
 
-	events := feedStream(t, chunks)
-
-	item := findItemDone(events, "reasoning")
-	if item == nil || item.EncryptedContent == nil {
-		t.Fatalf("reasoning item with encrypted_content missing")
+	encoder := &ResponseInbound{}
+	rejected := false
+	for _, chunk := range chunks {
+		encoded, err := encoder.TransformStream(context.Background(), chunk)
+		if err != nil {
+			if len(encoded) != 0 {
+				t.Fatal("opaque payload emitted before rejection")
+			}
+			rejected = true
+			break
+		}
 	}
-	var decoded []string
-	if err := json.Unmarshal([]byte(*item.EncryptedContent), &decoded); err != nil {
-		t.Fatalf("multi-sig encrypted_content should be JSON array, got %q: %v", *item.EncryptedContent, err)
-	}
-	if len(decoded) != 2 || decoded[0] != "sig1" || decoded[1] != "sig2" {
-		t.Fatalf("unexpected signatures: %v", decoded)
+	if !rejected {
+		t.Fatal("foreign opaque reasoning accepted")
 	}
 }
 
@@ -200,13 +202,20 @@ func TestStreamReasoningBlocksRedacted(t *testing.T) {
 		chunkWithFinish("claude", "stop"),
 	}
 
-	events := feedStream(t, chunks)
-
-	if findEvent(events, "response.output_item.added") == nil {
-		t.Fatalf("redacted block should open a reasoning item; events=%v", eventTypes(events))
+	encoder := &ResponseInbound{}
+	rejected := false
+	for _, chunk := range chunks {
+		encoded, err := encoder.TransformStream(context.Background(), chunk)
+		if err != nil {
+			if len(encoded) != 0 {
+				t.Fatal("opaque payload emitted before rejection")
+			}
+			rejected = true
+			break
+		}
 	}
-	if findItemDone(events, "reasoning") == nil {
-		t.Fatalf("redacted block should close with reasoning output_item.done; events=%v", eventTypes(events))
+	if !rejected {
+		t.Fatal("foreign opaque reasoning accepted")
 	}
 }
 
@@ -221,14 +230,20 @@ func TestStreamReasoningLegacyFallback(t *testing.T) {
 		chunkWithFinish("openrouter", "stop"),
 	}
 
-	events := feedStream(t, chunks)
-
-	item := findItemDone(events, "reasoning")
-	if item == nil || item.EncryptedContent == nil {
-		t.Fatalf("legacy reasoning path lost signature; events=%v", eventTypes(events))
+	encoder := &ResponseInbound{}
+	rejected := false
+	for _, chunk := range chunks {
+		encoded, err := encoder.TransformStream(context.Background(), chunk)
+		if err != nil {
+			if len(encoded) != 0 {
+				t.Fatal("opaque payload emitted before rejection")
+			}
+			rejected = true
+			break
+		}
 	}
-	if *item.EncryptedContent != "sigLegacy" {
-		t.Fatalf("expected legacy signature verbatim, got %q", *item.EncryptedContent)
+	if !rejected {
+		t.Fatal("foreign opaque reasoning accepted")
 	}
 }
 
@@ -340,7 +355,7 @@ func TestStreamToolCallArgumentDeltaUsesStoredOutputIndex(t *testing.T) {
 	}
 }
 
-func TestTransformStreamEventsSignatureOnlyStillOpensReasoningItem(t *testing.T) {
+func TestTransformStreamEventsUnprovenSignatureRejected(t *testing.T) {
 	i := &ResponseInbound{}
 	ctx := context.Background()
 
@@ -370,14 +385,8 @@ func TestTransformStreamEventsSignatureOnlyStillOpensReasoningItem(t *testing.T)
 			Usage: &model.Usage{PromptTokens: 1, CompletionTokens: 1, TotalTokens: 2},
 		},
 	})
-	if err != nil {
-		t.Fatalf("TransformStreamEvents failed: %v", err)
-	}
-
-	events := parseSSEEvents(t, out)
-	item := findItemDone(events, "reasoning")
-	if item == nil || item.EncryptedContent == nil || *item.EncryptedContent != "sig_only" {
-		t.Fatalf("expected reasoning output item with encrypted_content, got %+v", item)
+	if err == nil || len(out) != 0 {
+		t.Fatalf("unproven signature accepted: %s %v", out, err)
 	}
 }
 
@@ -389,9 +398,9 @@ func TestTransformStreamMatchesStreamEventsProjection(t *testing.T) {
 		}),
 		chunkWithDelta("claude", &model.Message{
 			ReasoningBlocks: []model.ReasoningBlock{{
-				Kind:      model.ReasoningBlockKindSignature,
-				Signature: "sigA",
-				Provider:  "anthropic",
+				Kind:     model.ReasoningBlockKindThinking,
+				Text:     "more thinking",
+				Provider: "anthropic",
 			}},
 		}),
 		chunkWithDelta("claude", &model.Message{

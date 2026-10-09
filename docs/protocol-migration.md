@@ -33,7 +33,7 @@ Factories construct a fresh inbound/outbound object. Retained interfaces are `In
 
 ### Validation and completion tracking
 
-P0 and P1 completed. P2 integrates the retained codecs and compatibility facades. P3-P6 verification and integration records follow as their gates complete; intermediate commits are not independent deployment recommendations.
+P0-P5 are committed; P6 contains the final validation, boundary fixes and delivery record. Functional/build gates pass with the specific race and performance limitations listed below. Intermediate commits are not independent deployment recommendations.
 
 P1 adds selected upstream wire DTOs in three protocol packages, local frame/lifecycle interfaces, namespace extensions and a deep request clone. It does not switch production traffic. No upstream llm Request/Response or executor is imported. Upstream usage DTOs exclude cost fields/calculation and provider-specific accounting. Citation wire unions locally extend the pinned source with document configuration, complete position fields, unknown fields, explicit false/null and assistant history support. Targeted protocol and IR tests pass under Go 1.26.3 and Go 1.25.0.
 
@@ -87,6 +87,37 @@ Create/enable and manual type changes reject unsupported protocols. Disabled/del
 
 Affected op/sitesync/model/helper/grouphealth/handler/registry packages pass their tests under Go 1.25.0. Retired codec-only tests were removed with those implementations; mixed business tests retain active-protocol assertions and change only retirement expectations. Frontend TypeScript and production build pass using the locked pnpm 11.1.2 project. The machine uses Node 24.16.0 instead of the declared Node 22; the build warns but succeeds. The read-only local SQLite audit reports no retired channels or affected groups.
 
-### Deployment rollback
+### P6: final validation and delivery
+
+The final boundary audit additionally rejects native/custom/image-generation items and foreign opaque signatures before an encoder can silently omit them or turn them into another protocol's function/thinking block. Chat supplemental arrays/audio/choice extensions survive the event path. Generic reasoning text remains translatable. Native same-protocol data retains provenance. Tests that formerly expected fabricated Gemini/foreign signatures now assert explicit rejection, with the exact changes documented in each protocol SOURCES.md; they were not deleted to conceal failures.
+
+Validation uses Go 1.25.0, Windows amd64, workspace GOCACHE and GOTELEMETRY=off. Source code was frozen for final checks. No remote paid model calls or deployment were performed.
+
+| Check | Result / evidence |
+| --- | --- |
+| Full Go tests | `go test -mod=readonly ./... -count=1` passes; local log `.tmp/protocol-migration/all-tests-final.log` |
+| Final finite protocol fuzz | Chat request union 556806, tool fragments 4706, citation union 461275 executions; all pass, 10-second budget/two workers; logs `chat-request-fuzz-final.log`, `chat-tools-fuzz-final.log`, `citations-fuzz-final.log` |
+| Go 1.25 vet/build | `go vet -mod=readonly ./...` and `go build -mod=readonly ./...` pass |
+| Full required race | Command executed, overall FAIL only at unchanged `TestEarlyHeartbeat_DelayedFirstHeartbeat`; all other package results pass. Final log `race-release-candidate.log`; baseline failure `race-baseline.log` |
+| 18 public conversions | Pass, including local HTTP request inspection and downstream non-stream/SSE reparsing |
+| citations union/history/zero positions/delta/multiple blocks | Pass, including wrong-shape rejection, unknown fields and aggregate round trip |
+| native tools/order/reasoning/signatures/usage/EOF/reset | Pass in protocol and shared IR fixtures |
+| baseline vs migrated relay contracts | Same existing assertions pass on pristine baseline and migrated tree: candidate/key preference, retry/failover, sticky, exact replay, HTTP/WS continuation, compact, alias mapping, suffix, cache ratio and metrics |
+| Core policy diff audit | relay.go, balancer/, metrics.go, ws_session.go, ws_client.go and responses_replay_store.go unchanged from baseline |
+| SSE contract and fuzz | Pass; segmented/coalesced read, CRLF/multiline/comments/event-only, invalid JSON propagation, limit and cancellation; 4757 executions in a finite 10-second run |
+| Frontend | pnpm TypeScript check and production build pass (Node24 environment warning; Node22 declared) |
+| Data compatibility | Read-only local audit empty; retired type import/state/binding/group fixtures pass; no live DB writes |
+| License/package checks | Pinned LGPL and incorporated GPL text, historical MIT notice, SHA/source manifest included in archives and Docker COPY; bash syntax check passes |
+| Final performance snapshot | Same Go1.25 compiler/fixtures, three alternating runs: Chat/Responses request conversion time is 5.97×/6.14× baseline; Responses 4096-delta retained heap is 2.989→12.847 MiB. Local conversion microbenchmarks, not service QPS/RSS; full method and source hashes in performance report |
+
+Changed files are listed in `protocol-modified-files.json`; field-level boundaries in `protocol-field-coverage.md`; sources and hashes in `protocol-upstream-manifest.json`; production compatibility references in `protocol-exported-symbols.json`. `protocol-performance.md` reports time, allocations, first-frame latency and sampled/retained heap with reproducible fixtures and limitations.
+
+Expected differences from baseline: retired endpoints are unavailable; text arrays/unknown fields/citations are retained; raw item order and tool argument strings are corrected; partial streams and explicit errors cannot masquerade as completed success; native cross-protocol data without an equivalent representation now errors; invalid foreign signature shims are removed. These are protocol correctness or explicit retirement changes, not new candidate selection/retry policies.
+
+Remaining limitations: full race is not green because the unchanged heartbeat test concurrently reads httptest.ResponseRecorder while its heartbeat goroutine writes (baseline reproduction saved); no live upstream end-to-end or Docker daemon build was performed. Finite fuzz/fixture tests do not prove arbitrary undocumented extensions translatable. Performance increases are measured and reported, not claimed away; this migration does not cap process RSS or change existing full-stream log retention. No production release/push is part of this task.
+
+### Deployment rollback procedure
 
 Before deployment, back up database and configuration. Revert migration commits in reverse stage order or deploy the baseline image. Do not renumber, delete or rewrite persisted channel types. Preserve the user-owned task specification and unrelated changes during rollback.
+
+P0 `f47b558`, P1 `9746da0`, P2 `a381683`, P3 `3bb3039`, P4 `cb905ba`, P5 `fec9b36`; P6 is the delivery commit containing this final report. After preserving any later work, revert P6 then P5 through P0 in that order. On a clean deployment checkout, `git revert --no-commit 98c380bc205b673f3f9c42100ba68397df7a9947..HEAD` followed by review and a rollback commit reverts this contiguous migration series; do not use that range after unrelated commits without selecting only the seven migration commits. Alternatively redeploy the known baseline artifact with the saved data/config. No schema renumbering or destructive migration needs reversing.

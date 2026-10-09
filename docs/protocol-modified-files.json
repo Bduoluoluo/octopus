@@ -1,0 +1,803 @@
+{
+  "baseline": "98c380bc205b673f3f9c42100ba68397df7a9947",
+  "description": "Cumulative staged/worktree migration compared with baseline. Renames include previous path; user task specification and generated build/test artifacts excluded.",
+  "files": [
+    {
+      "status": "M",
+      "path": ".github/ISSUE_TEMPLATE/bug.yml"
+    },
+    {
+      "status": "M",
+      "path": "CLAUDE.md"
+    },
+    {
+      "status": "A",
+      "path": "docs/protocol-exported-symbols.json"
+    },
+    {
+      "status": "A",
+      "path": "docs/protocol-field-coverage.md"
+    },
+    {
+      "status": "A",
+      "path": "docs/protocol-migration.md"
+    },
+    {
+      "status": "A",
+      "path": "docs/protocol-modified-files.json"
+    },
+    {
+      "status": "A",
+      "path": "docs/protocol-performance.md"
+    },
+    {
+      "status": "A",
+      "path": "docs/protocol-upstream-manifest.json"
+    },
+    {
+      "status": "M",
+      "path": "go.mod"
+    },
+    {
+      "status": "M",
+      "path": "internal/grouphealth/probe_test.go"
+    },
+    {
+      "status": "M",
+      "path": "internal/grouphealth/probe.go"
+    },
+    {
+      "status": "M",
+      "path": "internal/helper/fetch.go"
+    },
+    {
+      "status": "M",
+      "path": "internal/helper/prompt_suffix_test.go"
+    },
+    {
+      "status": "M",
+      "path": "internal/helper/prompt_suffix.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/helper/retired_protocols_test.go"
+    },
+    {
+      "status": "M",
+      "path": "internal/helper/test_model_test.go"
+    },
+    {
+      "status": "M",
+      "path": "internal/helper/test_model.go"
+    },
+    {
+      "status": "M",
+      "path": "internal/model/channel.go"
+    },
+    {
+      "status": "M",
+      "path": "internal/model/site_test.go"
+    },
+    {
+      "status": "M",
+      "path": "internal/model/site.go"
+    },
+    {
+      "status": "M",
+      "path": "internal/op/backup.go"
+    },
+    {
+      "status": "M",
+      "path": "internal/op/channel.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/op/retired_protocols_test.go"
+    },
+    {
+      "status": "M",
+      "path": "internal/op/site_channel.go"
+    },
+    {
+      "status": "M",
+      "path": "internal/op/site_import.go"
+    },
+    {
+      "status": "M",
+      "path": "internal/op/site.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/protocol/anthropic/citations_stream_test.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/protocol/anthropic/citations_test.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/protocol/anthropic/citations.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/protocol/anthropic/compat.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/protocol/anthropic/cross_protocol_test.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/protocol/anthropic/fields.go"
+    },
+    {
+      "status": "R098",
+      "from": "internal/transformer/inbound/anthropic/cache_control.go",
+      "path": "internal/protocol/anthropic/inbound/cache_control.go"
+    },
+    {
+      "status": "R087",
+      "from": "internal/transformer/inbound/anthropic/messages_test.go",
+      "path": "internal/protocol/anthropic/inbound/messages_test.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/protocol/anthropic/inbound/messages.go"
+    },
+    {
+      "status": "R099",
+      "from": "internal/transformer/inbound/anthropic/model_test.go",
+      "path": "internal/protocol/anthropic/inbound/model_test.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/protocol/anthropic/inbound/model.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/protocol/anthropic/inbound/stream_metadata_test.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/protocol/anthropic/inbound/stream.go"
+    },
+    {
+      "status": "R097",
+      "from": "internal/transformer/inbound/anthropic/thinking.go",
+      "path": "internal/protocol/anthropic/inbound/thinking.go"
+    },
+    {
+      "status": "R056",
+      "from": "internal/transformer/inbound/anthropic/model.go",
+      "path": "internal/protocol/anthropic/model.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/protocol/anthropic/native_roundtrip_test.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/protocol/anthropic/native.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/protocol/anthropic/outbound/citations.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/protocol/anthropic/outbound/frame_test.go"
+    },
+    {
+      "status": "R099",
+      "from": "internal/transformer/outbound/anthropic/messages_test.go",
+      "path": "internal/protocol/anthropic/outbound/messages_test.go"
+    },
+    {
+      "status": "R079",
+      "from": "internal/transformer/outbound/anthropic/messages.go",
+      "path": "internal/protocol/anthropic/outbound/messages.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/protocol/anthropic/outbound/native.go"
+    },
+    {
+      "status": "R099",
+      "from": "internal/transformer/outbound/anthropic/signature_audit_test.go",
+      "path": "internal/protocol/anthropic/outbound/signature_audit_test.go"
+    },
+    {
+      "status": "R098",
+      "from": "internal/transformer/outbound/anthropic/stop_sequence_test.go",
+      "path": "internal/protocol/anthropic/outbound/stop_sequence_test.go"
+    },
+    {
+      "status": "R099",
+      "from": "internal/transformer/outbound/anthropic/stream_event_test.go",
+      "path": "internal/protocol/anthropic/outbound/stream_event_test.go"
+    },
+    {
+      "status": "R099",
+      "from": "internal/transformer/outbound/anthropic/stream_usage_test.go",
+      "path": "internal/protocol/anthropic/outbound/stream_usage_test.go"
+    },
+    {
+      "status": "R099",
+      "from": "internal/transformer/outbound/anthropic/stream_zero_usage_test.go",
+      "path": "internal/protocol/anthropic/outbound/stream_zero_usage_test.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/protocol/anthropic/outbound/stream.go"
+    },
+    {
+      "status": "R099",
+      "from": "internal/transformer/outbound/anthropic/topk_service_tier_test.go",
+      "path": "internal/protocol/anthropic/outbound/topk_service_tier_test.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/protocol/anthropic/SOURCES.md"
+    },
+    {
+      "status": "A",
+      "path": "internal/protocol/anthropic/upstream_model_test.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/protocol/anthropic/usage.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/protocol/anthropic/validation.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/protocol/cross_capability_test.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/protocol/LICENSE-GPL-3.0"
+    },
+    {
+      "status": "A",
+      "path": "internal/protocol/LICENSE-LGPL-3.0"
+    },
+    {
+      "status": "A",
+      "path": "internal/protocol/matrix_test.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/protocol/NOTICE"
+    },
+    {
+      "status": "A",
+      "path": "internal/protocol/openaichat/capability.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/protocol/openaichat/codec_test.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/protocol/openaichat/codec.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/protocol/openaichat/extensions.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/protocol/openaichat/fields.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/protocol/openaichat/fuzz_test.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/protocol/openaichat/inbound_convert.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/protocol/openaichat/model.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/protocol/openaichat/outbound_convert.go"
+    },
+    {
+      "status": "R099",
+      "from": "internal/transformer/outbound/openai/chat_issue88_test.go",
+      "path": "internal/protocol/openaichat/outbound/chat_issue88_test.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/protocol/openaichat/outbound/chat_test_helpers_test.go"
+    },
+    {
+      "status": "R099",
+      "from": "internal/transformer/outbound/openai/chat_test.go",
+      "path": "internal/protocol/openaichat/outbound/chat_test.go"
+    },
+    {
+      "status": "R099",
+      "from": "internal/transformer/outbound/openai/chat_thinking_test.go",
+      "path": "internal/protocol/openaichat/outbound/chat_thinking_test.go"
+    },
+    {
+      "status": "R089",
+      "from": "internal/transformer/outbound/openai/chat.go",
+      "path": "internal/protocol/openaichat/outbound/chat.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/protocol/openaichat/SOURCES.md"
+    },
+    {
+      "status": "A",
+      "path": "internal/protocol/openaichat/stream.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/protocol/openaichat/upstream_model_test.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/protocol/openaichat/usage_convert.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/protocol/openaichat/usage.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/protocol/openairesponses/extensions.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/protocol/openairesponses/inbound/extensions.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/protocol/openairesponses/inbound/item_json.go"
+    },
+    {
+      "status": "R098",
+      "from": "internal/transformer/inbound/openai/response_multimodal_test.go",
+      "path": "internal/protocol/openairesponses/inbound/response_multimodal_test.go"
+    },
+    {
+      "status": "R099",
+      "from": "internal/transformer/inbound/openai/response_output_test.go",
+      "path": "internal/protocol/openairesponses/inbound/response_output_test.go"
+    },
+    {
+      "status": "R082",
+      "from": "internal/transformer/inbound/openai/response_stream_test.go",
+      "path": "internal/protocol/openairesponses/inbound/response_stream_test.go"
+    },
+    {
+      "status": "R099",
+      "from": "internal/transformer/inbound/openai/response_test.go",
+      "path": "internal/protocol/openairesponses/inbound/response_test.go"
+    },
+    {
+      "status": "R084",
+      "from": "internal/transformer/inbound/openai/response_validation_test.go",
+      "path": "internal/protocol/openairesponses/inbound/response_validation_test.go"
+    },
+    {
+      "status": "R073",
+      "from": "internal/transformer/inbound/openai/response.go",
+      "path": "internal/protocol/openairesponses/inbound/response.go"
+    },
+    {
+      "status": "R099",
+      "from": "internal/transformer/inbound/openai/truncation_test.go",
+      "path": "internal/protocol/openairesponses/inbound/truncation_test.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/protocol/openairesponses/migration_test.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/protocol/openairesponses/model.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/protocol/openairesponses/outbound/extensions.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/protocol/openairesponses/outbound/headers.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/protocol/openairesponses/outbound/output.go"
+    },
+    {
+      "status": "R099",
+      "from": "internal/transformer/outbound/openai/response_function_call_test.go",
+      "path": "internal/protocol/openairesponses/outbound/response_function_call_test.go"
+    },
+    {
+      "status": "R095",
+      "from": "internal/transformer/outbound/openai/response_issue65_test.go",
+      "path": "internal/protocol/openairesponses/outbound/response_issue65_test.go"
+    },
+    {
+      "status": "R099",
+      "from": "internal/transformer/outbound/openai/response_multimodal_test.go",
+      "path": "internal/protocol/openairesponses/outbound/response_multimodal_test.go"
+    },
+    {
+      "status": "R098",
+      "from": "internal/transformer/outbound/openai/response_test.go",
+      "path": "internal/protocol/openairesponses/outbound/response_test.go"
+    },
+    {
+      "status": "R063",
+      "from": "internal/transformer/outbound/openai/response.go",
+      "path": "internal/protocol/openairesponses/outbound/response.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/protocol/openairesponses/outbound/stream.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/protocol/openairesponses/safety_test.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/protocol/openairesponses/safety.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/protocol/openairesponses/SOURCES.md"
+    },
+    {
+      "status": "A",
+      "path": "internal/protocol/openairesponses/stream_event.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/protocol/openairesponses/upstream_model_test.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/protocol/openairesponses/usage.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/protocol/shared/json.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/protocol/wire/frame.go"
+    },
+    {
+      "status": "D",
+      "path": "internal/relay/bodycache/body_cache.go"
+    },
+    {
+      "status": "D",
+      "path": "internal/relay/images.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/relay/protocol_lifecycle_test.go"
+    },
+    {
+      "status": "M",
+      "path": "internal/relay/relay_forward.go"
+    },
+    {
+      "status": "M",
+      "path": "internal/relay/relay_stream.go"
+    },
+    {
+      "status": "M",
+      "path": "internal/relay/response_model_test.go"
+    },
+    {
+      "status": "M",
+      "path": "internal/relay/stream/processor.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/relay/stream/protocol_lifecycle_test.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/relay/stream/sse_contract_fuzz_test.go"
+    },
+    {
+      "status": "M",
+      "path": "internal/relay/ws_passthrough.go"
+    },
+    {
+      "status": "M",
+      "path": "internal/server/handlers/channel.go"
+    },
+    {
+      "status": "D",
+      "path": "internal/server/handlers/images.go"
+    },
+    {
+      "status": "M",
+      "path": "internal/server/handlers/relay.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/server/handlers/retired_protocols_test.go"
+    },
+    {
+      "status": "M",
+      "path": "internal/server/server.go"
+    },
+    {
+      "status": "M",
+      "path": "internal/sitesync/detect.go"
+    },
+    {
+      "status": "M",
+      "path": "internal/sitesync/management_test.go"
+    },
+    {
+      "status": "M",
+      "path": "internal/sitesync/project_test.go"
+    },
+    {
+      "status": "M",
+      "path": "internal/sitesync/project.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/sitesync/retired_protocols_test.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/sitesync/retired_protocols.go"
+    },
+    {
+      "status": "M",
+      "path": "internal/sitesync/route_probe_test.go"
+    },
+    {
+      "status": "M",
+      "path": "internal/sitesync/route_probe.go"
+    },
+    {
+      "status": "M",
+      "path": "internal/sitesync/storage_test.go"
+    },
+    {
+      "status": "M",
+      "path": "internal/sitesync/storage.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/transformer/inbound/anthropic/facade.go"
+    },
+    {
+      "status": "D",
+      "path": "internal/transformer/inbound/anthropic/messages.go"
+    },
+    {
+      "status": "M",
+      "path": "internal/transformer/inbound/openai/chat.go"
+    },
+    {
+      "status": "D",
+      "path": "internal/transformer/inbound/openai/embedding.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/transformer/inbound/openai/response_facade.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/transformer/inbound/register_test.go"
+    },
+    {
+      "status": "M",
+      "path": "internal/transformer/inbound/register.go"
+    },
+    {
+      "status": "M",
+      "path": "internal/transformer/model/extension.go"
+    },
+    {
+      "status": "M",
+      "path": "internal/transformer/model/interface.go"
+    },
+    {
+      "status": "M",
+      "path": "internal/transformer/model/model.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/transformer/model/protocol_test.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/transformer/model/protocol.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/transformer/model/stream_aggregation_contract_test.go"
+    },
+    {
+      "status": "M",
+      "path": "internal/transformer/model/stream_aggregator.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/transformer/model/stream_citations.go"
+    },
+    {
+      "status": "M",
+      "path": "internal/transformer/model/stream_event.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/transformer/model/stream_protocol_aggregate_test.go"
+    },
+    {
+      "status": "M",
+      "path": "internal/transformer/NOTICE"
+    },
+    {
+      "status": "A",
+      "path": "internal/transformer/outbound/anthropic/facade.go"
+    },
+    {
+      "status": "D",
+      "path": "internal/transformer/outbound/gemini/budget_test.go"
+    },
+    {
+      "status": "D",
+      "path": "internal/transformer/outbound/gemini/budget.go"
+    },
+    {
+      "status": "D",
+      "path": "internal/transformer/outbound/gemini/generation_config_test.go"
+    },
+    {
+      "status": "D",
+      "path": "internal/transformer/outbound/gemini/messages_test.go"
+    },
+    {
+      "status": "D",
+      "path": "internal/transformer/outbound/gemini/messages.go"
+    },
+    {
+      "status": "D",
+      "path": "internal/transformer/outbound/gemini/reasoning_index_test.go"
+    },
+    {
+      "status": "D",
+      "path": "internal/transformer/outbound/gemini/response_metadata_test.go"
+    },
+    {
+      "status": "D",
+      "path": "internal/transformer/outbound/gemini/roundtrip_test.go"
+    },
+    {
+      "status": "D",
+      "path": "internal/transformer/outbound/gemini/routing_test.go"
+    },
+    {
+      "status": "D",
+      "path": "internal/transformer/outbound/gemini/signature_audit_test.go"
+    },
+    {
+      "status": "D",
+      "path": "internal/transformer/outbound/gemini/tools_test.go"
+    },
+    {
+      "status": "D",
+      "path": "internal/transformer/outbound/gemini/usage_metadata_test.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/transformer/outbound/openai/chat_facade.go"
+    },
+    {
+      "status": "D",
+      "path": "internal/transformer/outbound/openai/embedding.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/transformer/outbound/openai/response_facade.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/transformer/outbound/register_test.go"
+    },
+    {
+      "status": "M",
+      "path": "internal/transformer/outbound/register.go"
+    },
+    {
+      "status": "D",
+      "path": "internal/transformer/outbound/volcengine/response.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/transformer/protocol_benchmark_test.go"
+    },
+    {
+      "status": "A",
+      "path": "internal/transformer/protocol_stream_benchmark_test.go"
+    },
+    {
+      "status": "M",
+      "path": "README_zh.md"
+    },
+    {
+      "status": "M",
+      "path": "README.md"
+    },
+    {
+      "status": "A",
+      "path": "scripts/audit-retired-protocols.py"
+    },
+    {
+      "status": "M",
+      "path": "scripts/build.sh"
+    },
+    {
+      "status": "M",
+      "path": "scripts/dockerfiles/Dockerfile.alpine"
+    },
+    {
+      "status": "M",
+      "path": "scripts/dockerfiles/Dockerfile.debian"
+    },
+    {
+      "status": "M",
+      "path": "web/public/locale/en.json"
+    },
+    {
+      "status": "M",
+      "path": "web/public/locale/zh_hans.json"
+    },
+    {
+      "status": "M",
+      "path": "web/public/locale/zh_hant.json"
+    },
+    {
+      "status": "M",
+      "path": "web/src/api/endpoints/channel.ts"
+    },
+    {
+      "status": "M",
+      "path": "web/src/components/modules/channel/Card.tsx"
+    },
+    {
+      "status": "M",
+      "path": "web/src/components/modules/channel/Form.tsx"
+    },
+    {
+      "status": "M",
+      "path": "web/src/components/modules/channel/TestPanel.tsx"
+    },
+    {
+      "status": "M",
+      "path": "web/src/components/modules/site-channel/constants.ts"
+    },
+    {
+      "status": "M",
+      "path": "web/src/components/modules/site-channel/utils.ts"
+    },
+    {
+      "status": "M",
+      "path": "web/src/components/modules/site/SiteEditDialog.tsx"
+    }
+  ]
+}

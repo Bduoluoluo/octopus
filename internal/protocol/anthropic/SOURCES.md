@@ -52,3 +52,26 @@ Capability boundaries and parent integration:
 Validation at handoff uses Go 1.25.0 and workspace GOCACHE. Anthropic tests and
 the full 18-case public conversion matrix pass; Anthropic race, vet and package
 build pass. Parent remains responsible for full integration/race/build results.
+
+P6 cross-protocol boundary audit:
+
+- `validation.go` validates request and response extensions, raw Responses input/
+  output items, native event carriers, tool types, modalities and opaque reasoning.
+  Responses image-generation/custom/native-only items and encrypted reasoning
+  are rejected explicitly instead of being omitted or changed into functions.
+- Response and stream encoding reject multiple choices before selecting choice 0
+  or emitting the batch. Chat audio, generated images, logprobs and supplemental
+  content arrays that have no implemented lossless encoding fail explicitly.
+  ChoiceExtensions metadata is also validated; ordinary metadata still aggregates.
+- Foreign stream provenance persists until ResetStream, preventing a later
+  signature-only event from reusing OpenAI encrypted content as an Anthropic
+  signature. Native Anthropic blocks and unknown Anthropic content remain supported.
+- Intentional protocol-correctness change: the old Gemini signature shim and
+  cached signature injection are removed. Empty-text Anthropic thinking retains
+  Anthropic provenance; foreign Gemini signatures now return an error rather than
+  fabricated Anthropic thinking blocks. The original four shim-related tests in
+  `inbound/messages_test.go` are retained with these corrected expectations.
+- `cross_protocol_test.go` covers all extension/raw/native carriers, actual
+  Responses decoding, root-only signature provenance, custom calls, Chat audio,
+  multi-choice requests/responses, per-batch rejection and unknown same-protocol
+  Anthropic preservation. No shared IR, relay or routing code is modified.

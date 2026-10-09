@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	wire "github.com/xuanli27/octopus/internal/protocol/openairesponses"
 	"github.com/xuanli27/octopus/internal/transformer/model"
 )
 
@@ -130,15 +131,31 @@ func (inbound *ResponseInbound) terminalEvent() []byte {
 }
 
 func validateResponseContent(response *model.InternalLLMResponse) error {
-	if len(response.RawResponsesOutputItems) > 0 {
-		return nil
+	if len(response.Choices) > 1 {
+		return fmt.Errorf("Responses cannot represent multiple choices")
 	}
+	if err := wire.ValidateContentExtensions(response.ProviderExtensions); err != nil {
+		return err
+	}
+	sameProtocol := len(response.RawResponsesOutputItems) > 0 || wire.HasResponsesFrame(response.ProtocolEvents)
 	for _, choice := range response.Choices {
+		if choice.Index != 0 {
+			return fmt.Errorf("Responses cannot represent choice %d", choice.Index)
+		}
+		if err := wire.ValidateContentExtensions(choice.ProviderExtensions); err != nil {
+			return err
+		}
 		message := choice.Message
 		if message == nil {
 			message = choice.Delta
 		}
 		if message == nil {
+			continue
+		}
+		if err := wire.ValidateMessageContent(message, sameProtocol); err != nil {
+			return err
+		}
+		if sameProtocol {
 			continue
 		}
 		if message.Audio != nil {

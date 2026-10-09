@@ -326,6 +326,7 @@ func ResponseFromLLM(r *model.InternalLLMResponse) *Response {
 // ChoiceFromLLM creates OpenAI Choice from unified model.Choice.
 func ChoiceFromLLM(c model.Choice) Choice {
 	choice := Choice{
+		Fields:       chatFields(c.ProviderExtensions),
 		Index:        c.Index,
 		FinishReason: c.FinishReason,
 	}

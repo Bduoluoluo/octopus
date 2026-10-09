@@ -28,21 +28,22 @@ const (
 )
 
 type StreamEvent struct {
-	Created           int64            `json:"created,omitempty"`
-	SystemFingerprint string           `json:"system_fingerprint,omitempty"`
-	ServiceTier       string           `json:"service_tier,omitempty"`
-	Message           *Message         `json:"message,omitempty"`
-	Logprobs          *LogprobsContent `json:"logprobs,omitempty"`
-	OutputIndex       *int             `json:"output_index,omitempty"`
-	ContentIndex      *int             `json:"content_index,omitempty"`
-	SequenceNumber    *int             `json:"sequence_number,omitempty"`
-	ItemID            string           `json:"item_id,omitempty"`
-	CallID            string           `json:"call_id,omitempty"`
-	Citation          *ContentCitation `json:"citation,omitempty"`
-	NativeItem        *ProtocolItem    `json:"native_item,omitempty"`
-	Status            string           `json:"status,omitempty"`
-	IncompleteDetails json.RawMessage  `json:"incomplete_details,omitempty"`
-	Kind              StreamEventKind  `json:"kind"`
+	ChoiceExtensions  *ProviderExtensions `json:"choice_extensions,omitempty"`
+	Created           int64               `json:"created,omitempty"`
+	SystemFingerprint string              `json:"system_fingerprint,omitempty"`
+	ServiceTier       string              `json:"service_tier,omitempty"`
+	Message           *Message            `json:"message,omitempty"`
+	Logprobs          *LogprobsContent    `json:"logprobs,omitempty"`
+	OutputIndex       *int                `json:"output_index,omitempty"`
+	ContentIndex      *int                `json:"content_index,omitempty"`
+	SequenceNumber    *int                `json:"sequence_number,omitempty"`
+	ItemID            string              `json:"item_id,omitempty"`
+	CallID            string              `json:"call_id,omitempty"`
+	Citation          *ContentCitation    `json:"citation,omitempty"`
+	NativeItem        *ProtocolItem       `json:"native_item,omitempty"`
+	Status            string              `json:"status,omitempty"`
+	IncompleteDetails json.RawMessage     `json:"incomplete_details,omitempty"`
+	Kind              StreamEventKind     `json:"kind"`
 
 	ID    string `json:"id,omitempty"`
 	Model string `json:"model,omitempty"`
@@ -99,6 +100,9 @@ func StreamEventsFromInternalResponse(response *InternalLLMResponse) []StreamEve
 		events = append(events, StreamEvent{Kind: StreamEventKindMetadata, ID: response.ID, Model: response.Model, Created: response.Created, SystemFingerprint: response.SystemFingerprint, ServiceTier: response.ServiceTier, ProviderExtensions: response.ProviderExtensions})
 	}
 	for _, choice := range response.Choices {
+		if choice.ProviderExtensions != nil {
+			events = append(events, StreamEvent{Kind: StreamEventKindMessageDelta, ID: response.ID, Model: response.Model, Index: choice.Index, ChoiceExtensions: choice.ProviderExtensions})
+		}
 		if choice.Delta != nil {
 			delta := choice.Delta
 			if delta.Audio != nil || len(delta.Images) > 0 || len(delta.Annotations) > 0 || delta.ProviderExtensions != nil || choice.Logprobs != nil {
@@ -147,6 +151,9 @@ func StreamEventsFromInternalResponse(response *InternalLLMResponse) []StreamEve
 				events = append(events, StreamEvent{Kind: StreamEventKindTextDelta, ID: response.ID, Model: response.Model, Index: choice.Index, Delta: &StreamDelta{Refusal: delta.Refusal}})
 			}
 			for _, part := range delta.Content.MultipleContent {
+				if len(part.Citations) == 0 {
+					events = append(events, StreamEvent{Kind: StreamEventKindMessageDelta, ID: response.ID, Model: response.Model, Index: choice.Index, Message: &Message{Content: MessageContent{MultipleContent: []MessageContentPart{part}}}})
+				}
 				for index := range part.Citations {
 					citation := part.Citations[index]
 					events = append(events, StreamEvent{Kind: StreamEventKindCitationDelta, ID: response.ID, Model: response.Model, Index: choice.Index, Citation: &citation})
@@ -236,6 +243,9 @@ func InternalResponseFromStreamEvents(events []StreamEvent) *InternalLLMResponse
 		}
 		switch event.Kind {
 		case StreamEventKindMessageDelta:
+			if event.ChoiceExtensions != nil {
+				choice.ProviderExtensions = mergeStreamExtensions(choice.ProviderExtensions, event.ChoiceExtensions)
+			}
 			merged := Choice{Message: choice.Delta, Logprobs: choice.Logprobs}
 			mergeChoiceDelta(&merged, Choice{Delta: event.Message, Logprobs: event.Logprobs})
 			choice.Delta, choice.Logprobs = merged.Message, merged.Logprobs

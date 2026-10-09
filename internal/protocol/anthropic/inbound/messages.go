@@ -8,7 +8,6 @@ import (
 
 	"github.com/samber/lo"
 	"github.com/xuanli27/octopus/internal/protocol/anthropic"
-	"github.com/xuanli27/octopus/internal/transformer/compat"
 	"github.com/xuanli27/octopus/internal/transformer/model"
 	"github.com/xuanli27/octopus/internal/utils/log"
 	"github.com/xuanli27/octopus/internal/utils/tokenizer"
@@ -38,23 +37,7 @@ type MessagesInbound struct {
 	nextBlockIndex int64
 	lastBlockKey   string
 	pendingUsage   *model.Usage
-}
-
-func geminiThoughtSignatureShim(block MessageContentBlock) string {
-	if block.Type != "thinking" || block.Thinking == nil || *block.Thinking != "" || block.Signature == nil {
-		return ""
-	}
-	return strings.TrimSpace(*block.Signature)
-}
-
-func countGeminiSignatureShims(blocks []MessageContentBlock) int {
-	count := 0
-	for _, block := range blocks {
-		if geminiThoughtSignatureShim(block) != "" {
-			count++
-		}
-	}
-	return count
+	foreignStream  bool
 }
 
 func (i *MessagesInbound) TransformRequest(ctx context.Context, body []byte) (*model.InternalLLMRequest, error) {
@@ -161,21 +144,10 @@ func (i *MessagesInbound) TransformRequest(ctx context.Context, body []byte) (*m
 			)
 
 			var reasoningSignature string
-			pendingGeminiThoughtSignatures := make([]string, 0)
 
 			for _, block := range msg.Content.MultipleContent {
 				switch block.Type {
 				case "thinking":
-					if sig := geminiThoughtSignatureShim(block); sig != "" {
-						pendingGeminiThoughtSignatures = append(pendingGeminiThoughtSignatures, sig)
-						chatMsg.AppendReasoningBlock(model.ReasoningBlock{
-							Kind:      model.ReasoningBlockKindSignature,
-							Index:     -1,
-							Signature: sig,
-							Provider:  "gemini",
-						})
-						continue
-					}
 
 					// Keep thinking content in MultipleContent to preserve order
 					thinkingText := ""
@@ -285,12 +257,6 @@ func (i *MessagesInbound) TransformRequest(ctx context.Context, body []byte) (*m
 							Arguments: string(block.Input),
 						},
 						CacheControl: convertToLLMCacheControl(block.CacheControl),
-					}
-					if len(pendingGeminiThoughtSignatures) > 0 {
-						toolCall.ThoughtSignature = pendingGeminiThoughtSignatures[0]
-						pendingGeminiThoughtSignatures = pendingGeminiThoughtSignatures[1:]
-					} else if sig := compat.RestoreGeminiThoughtSignature(toolCall.ID, toolCall.Function.Name); sig != "" {
-						toolCall.ThoughtSignature = sig
 					}
 					chatMsg.ToolCalls = append(chatMsg.ToolCalls, toolCall)
 					hasContent = true
@@ -567,6 +533,9 @@ func (i *MessagesInbound) TransformResponse(ctx context.Context, response *model
 	if len(response.Choices) > 1 {
 		return nil, fmt.Errorf("Anthropic Messages cannot represent multiple choices")
 	}
+	if err := anthropic.ValidateResponse(response); err != nil {
+		return nil, err
+	}
 	// Store the response for later retrieval
 	i.storedResponse = response
 
@@ -616,16 +585,6 @@ func (i *MessagesInbound) TransformResponse(ctx context.Context, response *model
 								Data: rb.Data,
 							})
 						}
-					case model.ReasoningBlockKindSignature:
-						if rb.Provider == "gemini" && rb.Signature != "" {
-							thinking := ""
-							signature := rb.Signature
-							contentBlocks = append(contentBlocks, MessageContentBlock{
-								Type:      "thinking",
-								Thinking:  &thinking,
-								Signature: &signature,
-							})
-						}
 					}
 				}
 			} else {
@@ -661,6 +620,14 @@ func (i *MessagesInbound) TransformResponse(ctx context.Context, response *model
 				})
 			} else if len(message.Content.MultipleContent) > 0 {
 				for _, part := range message.Content.MultipleContent {
+					if part.Native != nil && part.Native.Format == model.APIFormatAnthropicMessage {
+						var block MessageContentBlock
+						if err := json.Unmarshal(part.Native.Raw, &block); err != nil {
+							return nil, err
+						}
+						contentBlocks = append(contentBlocks, block)
+						continue
+					}
 					switch part.Type {
 					case "text":
 						if part.Text != nil {
@@ -699,7 +666,6 @@ func (i *MessagesInbound) TransformResponse(ctx context.Context, response *model
 
 			// Handle tool calls
 			if len(message.ToolCalls) > 0 {
-				emittedSignatureShims := countGeminiSignatureShims(contentBlocks)
 				for _, toolCall := range message.ToolCalls {
 					var input json.RawMessage
 					if toolCall.Function.Arguments != "" {
@@ -718,21 +684,6 @@ func (i *MessagesInbound) TransformResponse(ctx context.Context, response *model
 						ID:    toolCall.ID,
 						Name:  &toolCall.Function.Name,
 						Input: input,
-					}
-					if sig := strings.TrimSpace(toolCall.GetGeminiExtensions().ThoughtSignature); sig != "" {
-						compat.SaveGeminiThoughtSignature(toolCall.ID, toolCall.Function.Name, sig)
-						if emittedSignatureShims >= len(message.ToolCalls) {
-							contentBlocks = append(contentBlocks, block)
-							continue
-						}
-						thinking := ""
-						signature := sig
-						contentBlocks = append(contentBlocks, MessageContentBlock{
-							Type:      "thinking",
-							Thinking:  &thinking,
-							Signature: &signature,
-						})
-						emittedSignatureShims++
 					}
 					contentBlocks = append(contentBlocks, block)
 				}
@@ -777,6 +728,9 @@ func (i *MessagesInbound) TransformResponse(ctx context.Context, response *model
 }
 
 func (i *MessagesInbound) TransformStream(ctx context.Context, stream *model.InternalLLMResponse) ([]byte, error) {
+	if err := anthropic.ValidateResponse(stream); err != nil {
+		return nil, err
+	}
 	return i.TransformStreamEvents(ctx, model.StreamEventsFromInternalResponse(stream))
 }
 

@@ -15,6 +15,23 @@ func (value *OpenAIError) UnmarshalJSON(data []byte) error {
 	return json.Unmarshal(data, &value.Detail)
 }
 
+func (value *Choice) UnmarshalJSON(data []byte) error {
+	type plain Choice
+	var decoded plain
+	fields, err := decodeFields(data, &decoded)
+	if err != nil {
+		return err
+	}
+	*value = Choice(decoded)
+	value.Fields = fields
+	return nil
+}
+
+func (value Choice) MarshalJSON() ([]byte, error) {
+	type plain Choice
+	return encodeFields(plain(value), value.Fields)
+}
+
 func decodeFields(data []byte, target any) (model.ProtocolFields, error) {
 	if err := json.Unmarshal(data, target); err != nil {
 		return nil, err

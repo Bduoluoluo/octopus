@@ -2,14 +2,14 @@ package inbound
 
 import (
 	"context"
-	"encoding/json"
 	"strings"
 	"testing"
 
+	"github.com/xuanli27/octopus/internal/transformer/compat"
 	"github.com/xuanli27/octopus/internal/transformer/model"
 )
 
-func TestAnthropicRequestEmptyThinkingSignatureBecomesGeminiSignature(t *testing.T) {
+func TestAnthropicRequestEmptyThinkingRetainsAnthropicProvenance(t *testing.T) {
 	inbound := &MessagesInbound{}
 	body := []byte(`{
 		"model":"claude-3-5-sonnet",
@@ -28,18 +28,18 @@ func TestAnthropicRequestEmptyThinkingSignatureBecomesGeminiSignature(t *testing
 		t.Fatalf("TransformRequest() error = %v", err)
 	}
 	msg := req.Messages[0]
-	if msg.ReasoningContent != nil || msg.ReasoningSignature != nil {
-		t.Fatalf("expected Gemini shim not to populate Anthropic flat reasoning fields, got content=%v signature=%v", msg.ReasoningContent, msg.ReasoningSignature)
+	if msg.ReasoningContent != nil || msg.ReasoningSignature == nil || *msg.ReasoningSignature != "sig-gemini" {
+		t.Fatalf("expected opaque Anthropic signature without invented thinking text, got content=%v signature=%v", msg.ReasoningContent, msg.ReasoningSignature)
 	}
 	if len(msg.ReasoningBlocks) != 1 {
 		t.Fatalf("expected one reasoning block, got %+v", msg.ReasoningBlocks)
 	}
 	block := msg.ReasoningBlocks[0]
-	if block.Kind != model.ReasoningBlockKindSignature || block.Provider != "gemini" || block.Signature != "sig-gemini" {
+	if block.Kind != model.ReasoningBlockKindThinking || block.Provider != "anthropic" || block.Signature != "sig-gemini" {
 		t.Fatalf("unexpected reasoning block: %+v", block)
 	}
-	if len(msg.ToolCalls) != 1 || msg.ToolCalls[0].ThoughtSignature != "sig-gemini" {
-		t.Fatalf("expected signature bound to tool call, got %+v", msg.ToolCalls)
+	if len(msg.ToolCalls) != 1 || msg.ToolCalls[0].ThoughtSignature != "" {
+		t.Fatalf("expected tool call without a fabricated thought signature, got %+v", msg.ToolCalls)
 	}
 }
 
@@ -71,7 +71,7 @@ func TestAnthropicRequestKeepsNonEmptyThinkingAnthropic(t *testing.T) {
 	}
 }
 
-func TestTransformResponseEmitsGeminiThoughtSignatureShim(t *testing.T) {
+func TestTransformResponseRejectsGeminiThoughtSignatureShim(t *testing.T) {
 	inbound := &MessagesInbound{}
 	out, err := inbound.TransformResponse(context.Background(), &model.InternalLLMResponse{
 		ID:    "msg_1",
@@ -95,48 +95,14 @@ func TestTransformResponseEmitsGeminiThoughtSignatureShim(t *testing.T) {
 			},
 		}},
 	})
-	if err != nil {
-		t.Fatalf("TransformResponse() error = %v", err)
-	}
-
-	var resp Message
-	if err := json.Unmarshal(out, &resp); err != nil {
-		t.Fatalf("unmarshal response: %v\n%s", err, out)
-	}
-	if len(resp.Content) != 2 {
-		t.Fatalf("expected thinking shim and tool_use, got %+v", resp.Content)
-	}
-	shim := resp.Content[0]
-	if shim.Type != "thinking" || shim.Thinking == nil || *shim.Thinking != "" || shim.Signature == nil || *shim.Signature != "sig-gemini" {
-		t.Fatalf("unexpected shim block: %+v", shim)
-	}
-	if resp.Content[1].Type != "tool_use" {
-		t.Fatalf("expected tool_use after shim, got %+v", resp.Content[1])
+	if err == nil || len(out) != 0 || !strings.Contains(err.Error(), "opaque reasoning") {
+		t.Fatalf("foreign signature was not rejected: output=%s error=%v", out, err)
 	}
 }
 
-func TestAnthropicRequestRestoresGeminiThoughtSignatureFromCache(t *testing.T) {
+func TestAnthropicRequestDoesNotRestoreForeignSignatureFromCache(t *testing.T) {
 	inbound := &MessagesInbound{}
-	_, err := inbound.TransformResponse(context.Background(), &model.InternalLLMResponse{
-		ID:    "msg_1",
-		Model: "gemini-3.1-pro",
-		Choices: []model.Choice{{
-			Message: &model.Message{
-				Role: "assistant",
-				ToolCalls: []model.ToolCall{{
-					ID: "call_restore_1",
-					Function: model.FunctionCall{
-						Name:      "default_api:Bash",
-						Arguments: `{"command":"pwd"}`,
-					},
-					ThoughtSignature: "sig-from-cache",
-				}},
-			},
-		}},
-	})
-	if err != nil {
-		t.Fatalf("TransformResponse() error = %v", err)
-	}
+	compat.SaveGeminiThoughtSignature("call_restore_1", "default_api:Bash", "sig-from-cache")
 
 	body := []byte(`{
 		"model":"claude-3-5-sonnet",
@@ -153,8 +119,8 @@ func TestAnthropicRequestRestoresGeminiThoughtSignatureFromCache(t *testing.T) {
 	if len(req.Messages) != 1 || len(req.Messages[0].ToolCalls) != 1 {
 		t.Fatalf("expected one restored tool call, got %+v", req.Messages)
 	}
-	if got := req.Messages[0].ToolCalls[0].ThoughtSignature; got != "sig-from-cache" {
-		t.Fatalf("restored signature = %q, want sig-from-cache", got)
+	if got := req.Messages[0].ToolCalls[0].ThoughtSignature; got != "" {
+		t.Fatalf("restored signature = %q, want no foreign signature", got)
 	}
 }
 
@@ -184,7 +150,7 @@ func TestTransformResponseOmitsOctopusExtension(t *testing.T) {
 	}
 }
 
-func TestTransformStreamEmitsGeminiThoughtSignatureShim(t *testing.T) {
+func TestTransformStreamRejectsGeminiThoughtSignatureShim(t *testing.T) {
 	inbound := &MessagesInbound{}
 	out, err := inbound.TransformStream(context.Background(), &model.InternalLLMResponse{
 		ID:     "msg_1",
@@ -210,22 +176,8 @@ func TestTransformStreamEmitsGeminiThoughtSignatureShim(t *testing.T) {
 			},
 		}},
 	})
-	if err != nil {
-		t.Fatalf("TransformStream() error = %v", err)
-	}
-	text := string(out)
-	for _, want := range []string{
-		`"type":"thinking"`,
-		`"type":"signature_delta"`,
-		`"signature":"sig-gemini"`,
-		`"type":"tool_use"`,
-	} {
-		if !strings.Contains(text, want) {
-			t.Fatalf("expected %q in stream, got %s", want, text)
-		}
-	}
-	if strings.Index(text, `"type":"signature_delta"`) > strings.Index(text, `"type":"tool_use"`) {
-		t.Fatalf("expected signature_delta before tool_use, got %s", text)
+	if err == nil || len(out) != 0 || !strings.Contains(err.Error(), "opaque reasoning") {
+		t.Fatalf("foreign signature was not rejected: output=%s error=%v", out, err)
 	}
 }
 

@@ -76,6 +76,13 @@ No transport, routing, key, retry or sticky implementation belongs here.
 - Tool start is emitted once; the former duplicate-start assertion is updated
   while preserving the dense-index regression assertion.
 - Bare [DONE] no longer proves completion; EOF must follow a semantic terminal.
+- P6 safety audit: foreign/unproven signatures, redacted reasoning, unsupported
+  native blocks and tool results fail encoding rather than being reused as
+  Responses encrypted_content or silently dropped. Plain thinking text remains
+  convertible. Responses-origin raw items/frames retain opaque data. Non-stream,
+  legacy stream and event paths reject multiple choices before raw-frame output.
+  Streamed Chat text arrays are encoded; unrepresentable audio/image arrays and
+  native choice extensions are explicitly rejected.
 - The common IR aggregator owns final ordered native/citation/reasoning
   aggregation. Responses attaches output/content indices, item/call IDs and
   sequence numbers; raw frame is OpenAIResponses.Fields["stream_frame"], raw

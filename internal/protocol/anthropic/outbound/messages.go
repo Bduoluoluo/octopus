@@ -991,6 +991,13 @@ func convertMultiplePartContent(msg model.Message) anthropicModel.MessageContent
 	}
 
 	for _, part := range msg.Content.MultipleContent {
+		if part.Native != nil && part.Native.Format == model.APIFormatAnthropicMessage {
+			var block anthropicModel.MessageContentBlock
+			if err := json.Unmarshal(part.Native.Raw, &block); err == nil {
+				blocks = append(blocks, block)
+				continue
+			}
+		}
 		switch part.Type {
 		case "text":
 			if part.Text != nil {

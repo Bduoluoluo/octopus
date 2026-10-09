@@ -4,7 +4,7 @@
   "source_commit": "e863c6fe1942deddd0f6e471fa003c430e5314f0",
   "source_archive": "https://codeload.github.com/looplj/axonhub/tar.gz/e863c6fe1942deddd0f6e471fa003c430e5314f0",
   "source_license": "LGPL-3.0 for llm/ per pinned NOTICE, subject to individual file headers",
-  "stage": "P2 codec integration; P3-P6 validation recorded separately",
+  "stage": "P6 final integration and validation; known baseline race and measured performance regression documented",
   "files": [
     {
       "sha256": "f1df4c80b9611dee41a4d1f2ec9d7ce34f1049b221231f16926a03776c32c853",
@@ -339,7 +339,19 @@
     "internal/protocol/shared/json.go",
     "internal/protocol/wire/frame.go",
     "internal/transformer/model/protocol.go",
-    "internal/transformer/model/stream_citations.go"
+    "internal/transformer/model/stream_citations.go",
+    "internal/protocol/openaichat/capability.go",
+    "internal/protocol/cross_capability_test.go",
+    "internal/protocol/anthropic/validation.go",
+    "internal/protocol/anthropic/cross_protocol_test.go",
+    "internal/protocol/openairesponses/safety.go",
+    "internal/protocol/openairesponses/safety_test.go",
+    "internal/transformer/model/stream_aggregation_contract_test.go",
+    "internal/transformer/model/stream_protocol_aggregate_test.go",
+    "internal/relay/protocol_lifecycle_test.go",
+    "internal/relay/stream/protocol_lifecycle_test.go",
+    "internal/relay/stream/sse_contract_fuzz_test.go",
+    "internal/transformer/protocol_stream_benchmark_test.go"
   ],
   "additional_license": {
     "local_path": "internal/protocol/LICENSE-GPL-3.0",

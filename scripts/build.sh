@@ -317,6 +317,10 @@ create_archives() {
 
     # Copy documentation files to archives directory
     cp README.md LICENSE "${archives_dir}/" 2>/dev/null || log_info "Documentation files not found, skipping"
+    mkdir -p "${archives_dir}/licenses/protocol"
+    cp internal/protocol/NOTICE internal/protocol/LICENSE-LGPL-3.0 internal/protocol/LICENSE-GPL-3.0 "${archives_dir}/licenses/protocol/" || return 1
+    cp internal/transformer/NOTICE "${archives_dir}/licenses/transformer-NOTICE" || return 1
+    cp docs/protocol-upstream-manifest.json "${archives_dir}/licenses/protocol/source-manifest.json" || return 1
 
     # Archive all binaries (zip format for all platforms)
     while IFS= read -r -d '' file; do
@@ -334,7 +338,7 @@ create_archives() {
             continue
         fi
 
-        if (cd "${archives_dir}" && zip -q "${basename_file}.zip" "${APP_NAME}${extension}" README.md LICENSE 2>/dev/null); then
+        if (cd "${archives_dir}" && zip -qr "${basename_file}.zip" "${APP_NAME}${extension}" README.md LICENSE licenses 2>/dev/null); then
             rm -f "${archives_dir}/${APP_NAME}${extension}"
             log_success "Archived: archives/${basename_file}.zip"
         else

@@ -11,6 +11,10 @@ RUN apt-get update && apt-get install -y ca-certificates tzdata gosu && \
 
 COPY build/docker/${TARGETPLATFORM}/octopus /app/octopus
 COPY scripts/dockerfiles/entrypoint.sh /entrypoint.sh
+COPY LICENSE /usr/share/licenses/octopus/LICENSE
+COPY internal/protocol/NOTICE internal/protocol/LICENSE-LGPL-3.0 internal/protocol/LICENSE-GPL-3.0 /usr/share/licenses/octopus/protocol/
+COPY internal/transformer/NOTICE /usr/share/licenses/octopus/transformer-NOTICE
+COPY docs/protocol-upstream-manifest.json /usr/share/licenses/octopus/protocol/source-manifest.json
 
 RUN chmod +x /entrypoint.sh
 

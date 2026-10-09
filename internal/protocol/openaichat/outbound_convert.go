@@ -382,8 +382,9 @@ func (r *Response) ToLLMResponse() *model.InternalLLMResponse {
 // ToLLMChoice converts OpenAI Choice to unified model.Choice.
 func (c Choice) ToLLMChoice() model.Choice {
 	choice := model.Choice{
-		Index:        c.Index,
-		FinishReason: c.FinishReason,
+		ProviderExtensions: chatExtensions(c.Fields),
+		Index:              c.Index,
+		FinishReason:       c.FinishReason,
 	}
 
 	if c.Message != nil {

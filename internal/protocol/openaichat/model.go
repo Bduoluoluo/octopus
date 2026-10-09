@@ -340,11 +340,12 @@ type Response struct {
 
 // Choice represents a choice in the response.
 type Choice struct {
-	Index        int       `json:"index"`
-	Message      *Message  `json:"message,omitempty"`
-	Delta        *Message  `json:"delta,omitempty"`
-	FinishReason *string   `json:"finish_reason"`
-	Logprobs     *Logprobs `json:"logprobs"`
+	Fields       model.ProtocolFields `json:"-"`
+	Index        int                  `json:"index"`
+	Message      *Message             `json:"message,omitempty"`
+	Delta        *Message             `json:"delta,omitempty"`
+	FinishReason *string              `json:"finish_reason"`
+	Logprobs     *Logprobs            `json:"logprobs"`
 }
 
 // Logprobs represents logprobs information.

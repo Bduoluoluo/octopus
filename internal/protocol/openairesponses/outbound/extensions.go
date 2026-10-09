@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	wire "github.com/xuanli27/octopus/internal/protocol/openairesponses"
 	"github.com/xuanli27/octopus/internal/transformer/model"
 )
 
@@ -11,7 +12,19 @@ func validateResponsesRequest(request *model.InternalLLMRequest) error {
 	if request.N != nil && *request.N != 1 {
 		return fmt.Errorf("responses protocol does not support n=%d", *request.N)
 	}
+	if err := wire.ValidateContentExtensions(request.ProviderExtensions); err != nil {
+		return err
+	}
 	for _, tool := range request.Tools {
+		if err := wire.ValidateContentExtensions(tool.ProviderExtensions); err != nil {
+			return err
+		}
+		if err := wire.ValidateContentExtensions(tool.Function.ProviderExtensions); err != nil {
+			return err
+		}
+		if tool.Type != "function" && len(tool.AnthropicServerSpec) > 0 {
+			return fmt.Errorf("cannot convert Anthropic server tool to Responses")
+		}
 		switch tool.Type {
 		case "function":
 			if len(tool.Function.Parameters) > 0 {
@@ -28,6 +41,9 @@ func validateResponsesRequest(request *model.InternalLLMRequest) error {
 		}
 	}
 	for _, message := range request.Messages {
+		if err := wire.ValidateMessageContent(&message, request.RawAPIFormat == model.APIFormatOpenAIResponse); err != nil {
+			return err
+		}
 		for _, part := range message.Content.MultipleContent {
 			switch part.Type {
 			case "text", "image_url", "file", "input_audio":

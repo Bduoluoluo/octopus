@@ -1375,6 +1375,7 @@ func (r *InternalLLMResponse) IsChatResponse() bool {
 // Choice represents a choice in the response.
 // Choice represents a choice in the response.
 type Choice struct {
+	ProviderExtensions *ProviderExtensions `json:"-"`
 	// Index is the index of the choice in the list of choices.
 	Index int `json:"index"`
 

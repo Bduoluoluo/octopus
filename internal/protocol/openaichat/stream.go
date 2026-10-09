@@ -58,7 +58,13 @@ func (decoder *StreamDecoder) Push(ctx context.Context, frame model.StreamFrame)
 		}
 		decoder.choices[choice.Index] = decoder.choices[choice.Index] || finished
 	}
-	return model.StreamEventsFromInternalResponse(response), nil
+	events := model.StreamEventsFromInternalResponse(response)
+	for index := range events {
+		if events[index].Kind == model.StreamEventKindSignatureDelta || events[index].Delta != nil && events[index].Delta.Signature != "" {
+			events[index].ProviderExtensions = &model.ProviderExtensions{OpenAIChat: &model.ProtocolExtension{}}
+		}
+	}
+	return events, nil
 }
 
 func (decoder *StreamDecoder) End(ctx context.Context) ([]model.StreamEvent, error) {
@@ -177,6 +183,14 @@ func (encoder *StreamEncoder) Push(ctx context.Context, events []model.StreamEve
 		return nil
 	}
 	for _, event := range events {
+		if event.Delta != nil && event.Delta.Signature != "" && (event.ProviderExtensions == nil || event.ProviderExtensions.OpenAIChat == nil) {
+			return nil, fmt.Errorf("cannot represent another protocol's opaque signature in Chat Completions")
+		}
+		if event.NativeItem != nil {
+			if err := validateNativeItems([]model.ProtocolItem{*event.NativeItem}); err != nil {
+				return nil, err
+			}
+		}
 		if event.Kind == model.StreamEventKindNativeItem {
 			return nil, fmt.Errorf("cannot represent native protocol event in Chat Completions")
 		}

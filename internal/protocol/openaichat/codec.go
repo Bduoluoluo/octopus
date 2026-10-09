@@ -38,16 +38,28 @@ func EncodeRequest(ctx context.Context, request *model.InternalLLMRequest) ([]by
 	if request == nil {
 		return nil, fmt.Errorf("request is nil")
 	}
+	if err := validateExtensions(request.ProviderExtensions); err != nil {
+		return nil, err
+	}
+	if err := validateRawResponses(request.OpenAIRawInputItems()); err != nil {
+		return nil, err
+	}
 	for _, tool := range request.Tools {
 		if tool.Type != "function" {
 			return nil, fmt.Errorf("cannot represent tool %q in Chat Completions", tool.Type)
 		}
 	}
 	for _, message := range request.Messages {
+		if err := validateExtensions(message.ProviderExtensions); err != nil {
+			return nil, err
+		}
 		if request.RawAPIFormat != model.APIFormatOpenAIChatCompletion && (len(message.RedactedThinkingBlocks) > 0 || message.ReasoningSignature != nil) {
 			return nil, fmt.Errorf("cannot represent opaque reasoning in Chat Completions")
 		}
 		for _, part := range message.Content.MultipleContent {
+			if len(part.Citations) > 0 {
+				return nil, fmt.Errorf("cannot represent block citations in Chat request history without a lossless mapping")
+			}
 			if part.Native != nil || part.Document != nil || part.ServerToolUse != nil || part.ServerToolResult != nil {
 				return nil, fmt.Errorf("cannot represent %q content in Chat Completions", part.Type)
 			}
@@ -97,10 +109,24 @@ func EncodeResponse(response *model.InternalLLMResponse) ([]byte, error) {
 	if response == nil {
 		return json.Marshal(nil)
 	}
+	if err := validateExtensions(response.ProviderExtensions); err != nil {
+		return nil, err
+	}
+	if err := validateRawResponses(response.RawResponsesOutputItems); err != nil {
+		return nil, err
+	}
 	for _, choice := range response.Choices {
 		for _, message := range []*model.Message{choice.Message, choice.Delta} {
 			if message == nil {
 				continue
+			}
+			if err := validateExtensions(message.ProviderExtensions); err != nil {
+				return nil, err
+			}
+			for _, call := range message.ToolCalls {
+				if call.Type != "" && call.Type != "function" {
+					return nil, fmt.Errorf("cannot represent %q tool call in Chat Completions", call.Type)
+				}
 			}
 			for _, part := range message.Content.MultipleContent {
 				if part.Native != nil || part.Document != nil || part.ServerToolUse != nil || part.ServerToolResult != nil {

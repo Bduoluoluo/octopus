@@ -102,6 +102,9 @@ func (a *StreamAggregator) BuildAndReset() *InternalLLMResponse {
 }
 
 func mergeChoiceDelta(existingChoice *Choice, choice Choice) {
+	if choice.ProviderExtensions != nil {
+		existingChoice.ProviderExtensions = mergeStreamExtensions(existingChoice.ProviderExtensions, choice.ProviderExtensions)
+	}
 	if choice.Delta != nil {
 		delta := choice.Delta
 		existingChoice.Message.Annotations = append(existingChoice.Message.Annotations, delta.Annotations...)

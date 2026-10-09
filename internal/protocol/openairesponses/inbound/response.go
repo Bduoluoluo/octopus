@@ -140,6 +140,9 @@ func (i *ResponseInbound) TransformStream(ctx context.Context, stream *model.Int
 	if stream == nil {
 		return nil, nil
 	}
+	if err := validateResponseContent(stream); err != nil {
+		return nil, err
+	}
 	// Handle [DONE] marker
 	if stream.Object == "[DONE]" {
 		return i.processStreamEvents(ctx, []model.StreamEvent{{Kind: model.StreamEventKindDone}}, false)
@@ -161,6 +164,9 @@ func (i *ResponseInbound) TransformStreamEvents(ctx context.Context, events []mo
 func (i *ResponseInbound) processStreamEvents(ctx context.Context, events []model.StreamEvent, aggregate bool) ([]byte, error) {
 	if len(events) == 0 {
 		return nil, nil
+	}
+	if err := wire.ValidateStreamContent(events); err != nil {
+		return nil, err
 	}
 	if aggregate {
 		if stream := model.InternalResponseFromStreamEvents(events); stream != nil && stream.Object != "[DONE]" {
@@ -211,6 +217,12 @@ func (i *ResponseInbound) processStreamEvents(ctx context.Context, events []mode
 				return nil, fmt.Errorf("responses protocol cannot map Chat logprobs without text positions")
 			}
 			if event.Message != nil {
+				if event.Message.Content.Content != nil {
+					out = append(out, i.handleTextContent(event.Message.Content.Content)...)
+				}
+				for _, part := range event.Message.Content.MultipleContent {
+					out = append(out, i.handleTextContent(part.Text)...)
+				}
 				for _, annotation := range event.Message.Annotations {
 					citation := model.ContentCitation{Type: annotation.Type, StartIndex: annotation.StartIndex, EndIndex: annotation.EndIndex}
 					if annotation.URLCitation != nil {
@@ -1339,6 +1351,11 @@ func convertItemToMessage(item *ResponsesItem) (*model.Message, error) {
 		msg := &model.Message{
 			Role: "assistant",
 		}
+		raw, err := json.Marshal(item)
+		if err != nil {
+			return nil, err
+		}
+		msg.ProviderExtensions = &model.ProviderExtensions{OpenAIResponses: &model.ProtocolExtension{Items: []model.ProtocolItem{{Format: model.APIFormatOpenAIResponse, Position: 0, Raw: raw}}}}
 
 		var reasoningText strings.Builder
 		for _, summary := range item.Summary {
@@ -1546,19 +1563,10 @@ func convertToResponsesAPIResponse(resp *model.InternalLLMResponse) *ResponsesRe
 			continue
 		}
 
-		// Handle reasoning content
-		if message.ReasoningContent != nil && *message.ReasoningContent != "" {
-			result.Output = append(result.Output, ResponsesItem{
-				ID:     generateItemID(),
-				Type:   "reasoning",
-				Status: lo.ToPtr("completed"),
-				Summary: []ResponsesReasoningSummary{
-					{
-						Type: "summary_text",
-						Text: *message.ReasoningContent,
-					},
-				},
-			})
+		for _, item := range wire.ReasoningItems(message) {
+			item.ID = generateItemID()
+			item.Status = lo.ToPtr("completed")
+			result.Output = append(result.Output, item)
 		}
 
 		// Handle tool calls

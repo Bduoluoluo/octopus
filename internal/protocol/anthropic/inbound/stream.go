@@ -7,6 +7,7 @@ import (
 	"sort"
 
 	"github.com/samber/lo"
+	wire "github.com/xuanli27/octopus/internal/protocol/anthropic"
 	"github.com/xuanli27/octopus/internal/transformer/model"
 )
 
@@ -28,11 +29,19 @@ func (i *MessagesInbound) TransformStreamEvents(ctx context.Context, events []mo
 	if len(events) == 0 {
 		return nil, nil
 	}
+	foreign := i.foreignStream
 	for _, event := range events {
+		foreign = foreign || wire.ForeignStream(event)
+	}
+	for _, event := range events {
+		if err := wire.ValidateStreamEvent(event, foreign); err != nil {
+			return nil, err
+		}
 		if err := validateSupplementalEvent(event); err != nil {
 			return nil, err
 		}
 	}
+	i.foreignStream = foreign
 	if i.blocks == nil {
 		i.blocks = make(map[string]*outputBlock)
 	}

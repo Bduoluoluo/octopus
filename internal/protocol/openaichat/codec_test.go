@@ -152,3 +152,22 @@ func TestChatRejectsUnrepresentableCrossProtocolRequest(t *testing.T) {
 }
 
 func pointer[T any](value T) *T { return &value }
+
+func TestChatStreamSupplementalFieldsAndArrayContent(t *testing.T) {
+	var decoder StreamDecoder
+	var encoder StreamEncoder
+	fixture := `{"id":"r","model":"m","choices":[{"index":0,"future_choice":0,"delta":{"role":"assistant","content":[{"type":"text","text":"hello","future_part":false}],"future_delta":"value","audio":{"id":"a","data":"YQ==","transcript":"hello"}}}],"future_response":false}`
+	events, err := decoder.Push(context.Background(), model.StreamFrame{Data: []byte(fixture)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := encoder.Push(context.Background(), events)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, field := range []string{`"future_choice":0`, `"future_part":false`, `"future_delta":"value"`, `"future_response":false`, `"data":"YQ=="`, `"text":"hello"`} {
+		if !strings.Contains(string(encoded), field) {
+			t.Fatalf("lost %s: %s", field, encoded)
+		}
+	}
+}

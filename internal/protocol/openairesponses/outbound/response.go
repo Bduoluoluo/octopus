@@ -53,10 +53,10 @@ func (o *ResponseOutbound) TransformRequest(ctx context.Context, request *model.
 	}
 
 	request = model.CloneRequest(request)
-	request.NormalizeMessages()
 	if err := validateResponsesRequest(request); err != nil {
 		return nil, err
 	}
+	request.NormalizeMessages()
 	o.ResetStream()
 
 	// Convert to Responses API request format
@@ -655,6 +655,12 @@ func buildResponsesInput(req *model.InternalLLMRequest) ResponsesInput {
 }
 
 func MarshalResponsesInputItems(msgs []model.Message) (json.RawMessage, error) {
+	for _, message := range msgs {
+		native := message.ProviderExtensions != nil && message.ProviderExtensions.OpenAIResponses != nil && len(message.ProviderExtensions.OpenAIResponses.Items) > 0
+		if err := wire.ValidateMessageContent(&message, native); err != nil {
+			return nil, err
+		}
+	}
 	forceArray := true
 	input := convertInputFromMessages(msgs, model.TransformOptions{ArrayInputs: &forceArray})
 	if len(input.Items) == 0 {
@@ -813,20 +819,7 @@ func convertUserMessageToResponses(msg model.Message) ResponsesItem {
 func convertAssistantMessageToResponses(msg model.Message) []ResponsesItem {
 	var items []ResponsesItem
 
-	// Handle reasoning content
-	if msg.ReasoningContent != nil && *msg.ReasoningContent != "" {
-		reasoningItem := ResponsesItem{
-			Type: "reasoning",
-			Summary: []ResponsesReasoningSummary{{
-				Type: "summary_text",
-				Text: *msg.ReasoningContent,
-			}},
-		}
-		if msg.ReasoningSignature != nil && *msg.ReasoningSignature != "" {
-			reasoningItem.EncryptedContent = msg.ReasoningSignature
-		}
-		items = append(items, reasoningItem)
-	}
+	items = append(items, wire.ReasoningItems(&msg)...)
 
 	// Handle tool calls
 	for _, tc := range msg.ToolCalls {

@@ -9,7 +9,45 @@ import (
 )
 
 func validateNativeContent(request *model.InternalLLMRequest) error {
+	if request.Audio != nil {
+		return fmt.Errorf("Anthropic cannot represent Chat audio configuration")
+	}
+	for _, modality := range request.Modalities {
+		if modality != "text" {
+			return fmt.Errorf("Anthropic cannot represent requested modality %q", modality)
+		}
+	}
+	if err := wire.ValidateExtensions(request.ProviderExtensions); err != nil {
+		return err
+	}
+	if err := wire.ValidateResponsesItems(request.RawInputItems); err != nil {
+		return err
+	}
+	for _, tool := range request.Tools {
+		if err := wire.ValidateExtensions(tool.ProviderExtensions); err != nil {
+			return err
+		}
+		if err := wire.ValidateExtensions(tool.Function.ProviderExtensions); err != nil {
+			return err
+		}
+		if tool.Type != "" && tool.Type != "function" && len(tool.AnthropicServerSpec) == 0 {
+			return fmt.Errorf("Anthropic cannot represent tool type %q", tool.Type)
+		}
+	}
 	for _, message := range request.Messages {
+		if err := wire.ValidateMessage(&message, false); err != nil {
+			return err
+		}
+		if wire.ForeignExtensions(request.ProviderExtensions) || len(request.RawInputItems) > 0 {
+			if err := wire.ValidateForeignReasoning(&message); err != nil {
+				return err
+			}
+		}
+		if request.RawAPIFormat != model.APIFormatAnthropicMessage && request.RawAPIFormat != "" {
+			if message.ReasoningSignature != nil && *message.ReasoningSignature != "" {
+				return fmt.Errorf("Anthropic cannot reuse a foreign reasoning signature")
+			}
+		}
 		if _, _, err := wire.RestoreContent(message.ProviderExtensions); err != nil {
 			return err
 		}
