@@ -43,6 +43,16 @@ type InboundStreamEventTransformer interface {
 	TransformStreamEvents(ctx context.Context, events []StreamEvent) ([]byte, error)
 }
 
+type OutboundStreamFrameTransformer interface {
+	TransformStreamFrame(context.Context, StreamFrame) ([]StreamEvent, error)
+	EndStream(context.Context) ([]StreamEvent, error)
+	CloseStream() error
+}
+
+type InboundStreamResetter interface {
+	ResetStream()
+}
+
 /*
 请求流程
 非流式

@@ -16,11 +16,13 @@ const (
 )
 
 type ProviderExtensions struct {
-	Common     *CommonExtension     `json:"common,omitempty"`
-	Anthropic  *AnthropicExtension  `json:"anthropic,omitempty"`
-	Gemini     *GeminiExtension     `json:"gemini,omitempty"`
-	OpenAI     *OpenAIExtension     `json:"openai,omitempty"`
-	Volcengine *VolcengineExtension `json:"volcengine,omitempty"`
+	OpenAIChat      *ProtocolExtension   `json:"openai_chat,omitempty"`
+	OpenAIResponses *ProtocolExtension   `json:"openai_responses,omitempty"`
+	Common          *CommonExtension     `json:"common,omitempty"`
+	Anthropic       *AnthropicExtension  `json:"anthropic,omitempty"`
+	Gemini          *GeminiExtension     `json:"gemini,omitempty"`
+	OpenAI          *OpenAIExtension     `json:"openai,omitempty"`
+	Volcengine      *VolcengineExtension `json:"volcengine,omitempty"`
 }
 
 type CommonExtension struct {
@@ -28,6 +30,8 @@ type CommonExtension struct {
 }
 
 type AnthropicExtension struct {
+	Fields       ProtocolFields  `json:"fields,omitempty"`
+	Items        []ProtocolItem  `json:"items,omitempty"`
 	Beta         []string        `json:"beta,omitempty"`
 	CacheControl *CacheControl   `json:"cache_control,omitempty"`
 	MCPServers   json.RawMessage `json:"mcp_servers,omitempty"`
@@ -110,12 +114,17 @@ func CloneProviderExtensions(ext *ProviderExtensions) *ProviderExtensions {
 	if ext == nil {
 		return nil
 	}
-	cloned := &ProviderExtensions{}
+	cloned := &ProviderExtensions{
+		OpenAIChat:      cloneProtocolExtension(ext.OpenAIChat),
+		OpenAIResponses: cloneProtocolExtension(ext.OpenAIResponses),
+	}
 	if ext.Common != nil {
 		cloned.Common = &CommonExtension{Raw: cloneRawMessage(ext.Common.Raw)}
 	}
 	if ext.Anthropic != nil {
 		cloned.Anthropic = &AnthropicExtension{
+			Fields:       cloneProtocolFields(ext.Anthropic.Fields),
+			Items:        cloneProtocolItems(ext.Anthropic.Items),
 			Beta:         append([]string(nil), ext.Anthropic.Beta...),
 			CacheControl: cloneCacheControl(ext.Anthropic.CacheControl),
 			MCPServers:   cloneRawMessage(ext.Anthropic.MCPServers),

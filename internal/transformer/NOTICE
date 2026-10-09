@@ -1,5 +1,11 @@
 This directory contains code derived from the looplj/axonhub project.
 
+This historical attribution covers the pre-migration Octopus transformer
+implementation. Newly selected AxonHub code from commit
+e863c6fe1942deddd0f6e471fa003c430e5314f0 is tracked separately under
+internal/protocol/NOTICE and docs/protocol-upstream-manifest.json; its llm
+source is LGPL-3.0, not the historical MIT license reproduced below.
+
 Original Project: https://github.com/looplj/axonhub
 Original License: MIT License
 

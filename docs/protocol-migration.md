@@ -33,7 +33,9 @@ Factories construct a fresh inbound/outbound object. Retained interfaces are `In
 
 ### Validation and completion tracking
 
-P0 audit completed. P1-P6 have not been implemented or validated. No capability or migration completion is claimed by this document until the corresponding results are recorded.
+P0 and P1 completed. P2-P6 have not been implemented or validated. No production migration completion is claimed by this document until the corresponding results are recorded.
+
+P1 adds selected upstream wire DTOs in three protocol packages, local frame/lifecycle interfaces, namespace extensions and a deep request clone. It does not switch production traffic. No upstream llm Request/Response or executor is imported. Upstream usage DTOs exclude cost fields/calculation and provider-specific accounting. Citation wire unions locally extend the pinned source with document configuration, complete position fields, unknown fields, explicit false/null and assistant history support. Targeted protocol and IR tests pass under Go 1.26.3 and Go 1.25.0.
 
 `go test -mod=readonly -count=1 ./internal/transformer/... ./internal/relay/...` passed (relay 27.438 seconds). The baseline had no benchmarks in those packages; a fixed public request benchmark was added before modifying production code.
 

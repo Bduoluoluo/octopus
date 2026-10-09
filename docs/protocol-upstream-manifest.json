@@ -4,7 +4,68 @@
   "source_commit": "e863c6fe1942deddd0f6e471fa003c430e5314f0",
   "source_archive": "https://codeload.github.com/looplj/axonhub/tar.gz/e863c6fe1942deddd0f6e471fa003c430e5314f0",
   "source_license": "LGPL-3.0 for llm/ per pinned NOTICE, subject to individual file headers",
-  "stage": "P0",
-  "files": [],
+  "stage": "P1",
+  "files": [
+  {
+    "source_path": "llm/transformer/openai/model.go",
+    "local_path": "internal/protocol/openaichat/model.go",
+    "adaptation": "Wire DTOs only; direct references to Octopus IR and local pure JSON helpers; no upstream executors.",
+    "license": "LGPL-3.0 (llm source); source NOTICE reproduced for attribution"
+  },
+  {
+    "source_path": "llm/transformer/openai/responses/model.go",
+    "local_path": "internal/protocol/openairesponses/model.go",
+    "adaptation": "Wire DTOs only; direct references to Octopus IR and local pure JSON helpers; no upstream executors.",
+    "license": "LGPL-3.0 (llm source); source NOTICE reproduced for attribution"
+  },
+  {
+    "source_path": "llm/transformer/openai/responses/stream_event.go",
+    "local_path": "internal/protocol/openairesponses/stream_event.go",
+    "adaptation": "Wire DTOs only; direct references to Octopus IR and local pure JSON helpers; no upstream executors.",
+    "license": "LGPL-3.0 (llm source); source NOTICE reproduced for attribution"
+  },
+  {
+    "source_path": "llm/transformer/anthropic/model.go",
+    "local_path": "internal/protocol/anthropic/model.go",
+    "adaptation": "Wire DTOs only; direct references to Octopus IR and local pure JSON helpers; no upstream executors. Citation DTO extended with Octopus block-discriminated object/array union and complete location fields.",
+    "license": "LGPL-3.0 (llm source); source NOTICE reproduced for attribution"
+  },
+  {
+    "source_path": "llm/transformer/openai/usage.go",
+    "local_path": "internal/protocol/openaichat/usage.go",
+    "adaptation": "Only wire token-count structs; upstream cost and provider-platform accounting excluded.",
+    "license": "LGPL-3.0 (llm source); source NOTICE reproduced for attribution"
+  },
+  {
+    "source_path": "llm/transformer/openai/responses/usage.go",
+    "local_path": "internal/protocol/openairesponses/usage.go",
+    "adaptation": "Only wire token-count structs; upstream cost and provider-platform accounting excluded.",
+    "license": "LGPL-3.0 (llm source); source NOTICE reproduced for attribution"
+  },
+  {
+    "source_path": "llm/transformer/anthropic/usage.go",
+    "local_path": "internal/protocol/anthropic/usage.go",
+    "adaptation": "Only wire token-count structs; upstream cost and provider-platform accounting excluded.",
+    "license": "LGPL-3.0 (llm source); source NOTICE reproduced for attribution"
+  },
+  {
+    "source_path": "llm/LICENSE",
+    "local_path": "internal/protocol/LICENSE-LGPL-3.0",
+    "adaptation": "Unmodified license text.",
+    "license": "LGPL-3.0 (llm source); source NOTICE reproduced for attribution"
+  },
+  {
+    "source_path": "NOTICE",
+    "local_path": "internal/protocol/NOTICE",
+    "adaptation": "Preserve upstream ownership and scope; record selective adaptation.",
+    "license": "LGPL-3.0 (llm source); source NOTICE reproduced for attribution"
+  },
+  {
+    "source_path": "llm/transformer/openai/google.go",
+    "local_path": "internal/protocol/openaichat/extensions.go",
+    "adaptation": "Only standard-Chat tool extra-content DTO; no Gemini codec, stripping policy or provider platform.",
+    "license": "LGPL-3.0"
+  }
+],
   "excluded": ["pipeline", "router", "balancer", "HTTP/WS executors", "key management", "database", "session storage", "Bedrock", "Vertex", "OAuth", "automatic cache optimization", "upstream go.mod and go.sum"]
 }

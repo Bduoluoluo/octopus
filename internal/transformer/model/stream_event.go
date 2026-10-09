@@ -21,10 +21,21 @@ const (
 	StreamEventKindMessageStop       StreamEventKind = "message_stop"
 	StreamEventKindDone              StreamEventKind = "done"
 	StreamEventKindError             StreamEventKind = "error"
+	StreamEventKindCitationDelta     StreamEventKind = "citation_delta"
+	StreamEventKindNativeItem        StreamEventKind = "native_item"
 )
 
 type StreamEvent struct {
-	Kind StreamEventKind `json:"kind"`
+	OutputIndex       *int             `json:"output_index,omitempty"`
+	ContentIndex      *int             `json:"content_index,omitempty"`
+	SequenceNumber    *int             `json:"sequence_number,omitempty"`
+	ItemID            string           `json:"item_id,omitempty"`
+	CallID            string           `json:"call_id,omitempty"`
+	Citation          *ContentCitation `json:"citation,omitempty"`
+	NativeItem        *ProtocolItem    `json:"native_item,omitempty"`
+	Status            string           `json:"status,omitempty"`
+	IncompleteDetails json.RawMessage  `json:"incomplete_details,omitempty"`
+	Kind              StreamEventKind  `json:"kind"`
 
 	ID    string `json:"id,omitempty"`
 	Model string `json:"model,omitempty"`
