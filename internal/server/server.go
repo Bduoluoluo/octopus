@@ -5,8 +5,9 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/gin-contrib/gzip"
+	"github.com/gin-gonic/gin"
 	"github.com/xuanli27/octopus/internal/conf"
-	"github.com/xuanli27/octopus/internal/relay/bodycache"
 	_ "github.com/xuanli27/octopus/internal/server/handlers"
 	"github.com/xuanli27/octopus/internal/server/middleware"
 	"github.com/xuanli27/octopus/internal/server/resp"
@@ -14,8 +15,6 @@ import (
 	"github.com/xuanli27/octopus/internal/utils/log"
 	"github.com/xuanli27/octopus/internal/utils/safe"
 	"github.com/xuanli27/octopus/static"
-	"github.com/gin-contrib/gzip"
-	"github.com/gin-gonic/gin"
 )
 
 var httpSrv http.Server
@@ -25,13 +24,6 @@ func Start() error {
 		gin.SetMode(gin.DebugMode)
 	} else {
 		gin.SetMode(gin.ReleaseMode)
-	}
-
-	// 启动时清理 Images 请求体临时文件（失败仅告警，不阻断启动）
-	tmpDir := bodycache.TmpDirFromEnv()
-	olderThan := bodycache.TmpCleanupOlderThanFromEnv()
-	if err := bodycache.CleanupOldTmpFiles(tmpDir, bodycache.TmpFilePrefix, olderThan); err != nil {
-		log.Warnf("cleanup images tmp files failed: dir=%s prefix=%s olderThan=%s err=%v", tmpDir, bodycache.TmpFilePrefix, olderThan, err)
 	}
 
 	r := gin.New()

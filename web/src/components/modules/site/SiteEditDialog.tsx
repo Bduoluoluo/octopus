@@ -67,15 +67,11 @@ const ROUTE_BASE_URL_OPTIONS: ReadonlyArray<{ value: string; label: string }> = 
     { value: 'openai_chat', label: 'OpenAI Chat' },
     { value: 'openai_response', label: 'OpenAI Responses' },
     { value: 'anthropic', label: 'Anthropic Messages' },
-    { value: 'gemini', label: 'Gemini' },
-    { value: 'volcengine', label: 'Volcengine' },
-    { value: 'openai_embedding', label: 'OpenAI Embedding' },
 ];
 
 const DEFAULT_ROUTE_TYPE_OPTIONS: ReadonlyArray<{ value: string; label: string }> = [
     { value: 'openai_chat', label: 'OpenAI Chat' },
     { value: 'anthropic', label: 'Anthropic' },
-    { value: 'gemini', label: 'Gemini' },
 ];
 
 const PLATFORM_LABELS: Record<SitePlatform, string> = {

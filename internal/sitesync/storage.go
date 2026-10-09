@@ -581,7 +581,7 @@ func applyPersistedRouteState(item *model.SiteModel, existing *model.SiteModel, 
 		return
 	}
 
-	if existing != nil && (existing.ManualOverride || existing.RouteSource == model.SiteModelRouteSourceRuntimeLearned) {
+	if existing != nil && (existing.ManualOverride || existing.RouteSource == model.SiteModelRouteSourceRuntimeLearned || isRetiredSiteRoute(existing.RouteType)) {
 		item.RouteType = model.NormalizeSiteModelRouteType(existing.RouteType)
 		item.RouteSource = model.NormalizeSiteModelRouteSource(existing.RouteSource, existing.ManualOverride)
 		item.ManualOverride = existing.ManualOverride
@@ -591,7 +591,7 @@ func applyPersistedRouteState(item *model.SiteModel, existing *model.SiteModel, 
 	}
 
 	if routeType, routeRawPayload, explicit := resolveExplicitSyncRoute(item, existing); explicit {
-		if !model.IsProjectedSiteModelRouteType(routeType) {
+		if !model.IsProjectedSiteModelRouteType(routeType) && !isRetiredSiteRoute(routeType) && !hasRetiredEndpointMetadata(routeRawPayload) {
 			// 最后一步：历史遗留的未识别路由按模型名称猜测，避免模型停留在待人工指定状态。
 			routeType = model.InferSiteModelRouteType(item.ModelName)
 			routeRawPayload = markRouteMetadataGuessed(routeRawPayload, routeType)

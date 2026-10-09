@@ -19,8 +19,8 @@ const (
 	SitePlatformOneAPI    SitePlatform = "one-api"
 	SitePlatformOneHub    SitePlatform = "one-hub"
 	SitePlatformDoneHub   SitePlatform = "done-hub"
-	SitePlatformSub2API SitePlatform = "sub2api"
-	SitePlatformAPI     SitePlatform = "api"
+	SitePlatformSub2API   SitePlatform = "sub2api"
+	SitePlatformAPI       SitePlatform = "api"
 )
 
 type SiteCredentialType string
@@ -655,10 +655,7 @@ func IsProjectedSiteModelRouteType(routeType SiteModelRouteType) bool {
 	switch routeType {
 	case SiteModelRouteTypeOpenAIChat,
 		SiteModelRouteTypeOpenAIResponse,
-		SiteModelRouteTypeAnthropic,
-		SiteModelRouteTypeGemini,
-		SiteModelRouteTypeVolcengine,
-		SiteModelRouteTypeOpenAIEmbedding:
+		SiteModelRouteTypeAnthropic:
 		return true
 	default:
 		return false
@@ -685,10 +682,6 @@ func InferSiteModelRouteType(modelName string) SiteModelRouteType {
 	switch {
 	case strings.HasPrefix(lower, "claude"):
 		return SiteModelRouteTypeAnthropic
-	case strings.HasPrefix(lower, "gemini"):
-		return SiteModelRouteTypeGemini
-	case strings.Contains(lower, "embedding"):
-		return SiteModelRouteTypeOpenAIEmbedding
 	default:
 		return SiteModelRouteTypeOpenAIChat
 	}

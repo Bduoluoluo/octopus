@@ -153,34 +153,10 @@ func buildProbeInternalRequest(channelType outbound.OutboundType, modelName stri
 	one := int64(1)
 
 	switch channelType {
-	case outbound.OutboundTypeOpenAIEmbedding:
-		return &transformerModel.InternalLLMRequest{
-			Model:        modelName,
-			RawAPIFormat: transformerModel.APIFormatOpenAIEmbedding,
-			EmbeddingInput: &transformerModel.EmbeddingInput{
-				Single: &ping,
-			},
-		}
 	case outbound.OutboundTypeAnthropic:
 		return &transformerModel.InternalLLMRequest{
 			Model:        modelName,
 			RawAPIFormat: transformerModel.APIFormatAnthropicMessage,
-			Messages:     []transformerModel.Message{{Role: "user", Content: transformerModel.MessageContent{Content: &ping}}},
-			Stream:       &stream,
-			MaxTokens:    &one,
-		}
-	case outbound.OutboundTypeGemini:
-		return &transformerModel.InternalLLMRequest{
-			Model:        modelName,
-			RawAPIFormat: transformerModel.APIFormatGeminiContents,
-			Messages:     []transformerModel.Message{{Role: "user", Content: transformerModel.MessageContent{Content: &ping}}},
-			Stream:       &stream,
-			MaxTokens:    &one,
-		}
-	case outbound.OutboundTypeVolcengine:
-		return &transformerModel.InternalLLMRequest{
-			Model:        modelName,
-			RawAPIFormat: transformerModel.APIFormatOpenAIChatCompletion,
 			Messages:     []transformerModel.Message{{Role: "user", Content: transformerModel.MessageContent{Content: &ping}}},
 			Stream:       &stream,
 			MaxTokens:    &one,

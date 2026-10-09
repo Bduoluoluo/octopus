@@ -24,7 +24,6 @@ body:
         - OpenAI Chat Completions
         - OpenAI Responses
         - Anthropic Messages
-        - Google Gemini
     validations:
       required: true
   - type: dropdown

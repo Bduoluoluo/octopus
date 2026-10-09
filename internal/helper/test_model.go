@@ -57,7 +57,7 @@ func TestChannelModel(
 	if modelName == "" {
 		return nil, errors.New("model is empty")
 	}
-	if channel.Type == outbound.OutboundTypeOpenAIEmbedding {
+	if !outbound.IsSupported(channel.Type) {
 		return nil, fmt.Errorf("channel type %d does not support model testing", channel.Type)
 	}
 	baseURL := channel.GetBaseUrl()
@@ -153,38 +153,6 @@ func buildTestRequest(
 		return newJSONRequest(ctx, http.MethodPost, url, body, func(r *http.Request) {
 			r.Header.Set("X-Api-Key", key)
 			r.Header.Set("Anthropic-Version", "2023-06-01")
-		})
-
-	case outbound.OutboundTypeGemini:
-		var url string
-		if strings.HasSuffix(strings.TrimRight(baseURL, "/"), "/v1") {
-			url = normalizeBaseURL(baseURL, "") + "/models/" + modelName + ":generateContent"
-		} else {
-			url = normalizeBaseURL(baseURL, "v1beta") + "/models/" + modelName + ":generateContent"
-		}
-		body := map[string]any{
-			"contents": []map[string]any{
-				{"parts": []map[string]string{{"text": testPrompt}}},
-			},
-			"generationConfig": map[string]any{
-				"maxOutputTokens": testMaxTokens,
-			},
-		}
-		return newJSONRequest(ctx, http.MethodPost, url, body, func(r *http.Request) {
-			r.Header.Set("X-Goog-Api-Key", key)
-		})
-
-	case outbound.OutboundTypeVolcengine:
-		url := normalizeBaseURL(baseURL, "v3") + "/chat/completions"
-		body := map[string]any{
-			"model": modelName,
-			"messages": []map[string]string{
-				{"role": "user", "content": testPrompt},
-			},
-			"max_tokens": testMaxTokens,
-		}
-		return newJSONRequest(ctx, http.MethodPost, url, body, func(r *http.Request) {
-			r.Header.Set("Authorization", "Bearer "+key)
 		})
 
 	default:

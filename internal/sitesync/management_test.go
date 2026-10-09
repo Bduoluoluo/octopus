@@ -944,11 +944,11 @@ func TestSyncManagementPlatformAppliesPricingRouteMetadata(t *testing.T) {
 	if routeByModel["gpt-4o-mini"].RouteType != model.SiteModelRouteTypeOpenAIResponse {
 		t.Fatalf("expected gpt-4o-mini route type %q, got %q", model.SiteModelRouteTypeOpenAIResponse, routeByModel["gpt-4o-mini"].RouteType)
 	}
-	if routeByModel["text-embedding-3-large"].RouteType != model.SiteModelRouteTypeOpenAIEmbedding {
-		t.Fatalf("expected text-embedding-3-large route type %q, got %q", model.SiteModelRouteTypeOpenAIEmbedding, routeByModel["text-embedding-3-large"].RouteType)
+	if routeByModel["text-embedding-3-large"].RouteType != model.SiteModelRouteTypeUnknown {
+		t.Fatalf("expected text-embedding-3-large route type %q, got %q", model.SiteModelRouteTypeUnknown, routeByModel["text-embedding-3-large"].RouteType)
 	}
-	if routeByModel["vendor-embedding-x"].RouteType != model.SiteModelRouteTypeOpenAIEmbedding {
-		t.Fatalf("expected vendor-embedding-x route type %q, got %q", model.SiteModelRouteTypeOpenAIEmbedding, routeByModel["vendor-embedding-x"].RouteType)
+	if routeByModel["vendor-embedding-x"].RouteType != model.SiteModelRouteTypeOpenAIChat {
+		t.Fatalf("expected vendor-embedding-x route type %q, got %q", model.SiteModelRouteTypeOpenAIChat, routeByModel["vendor-embedding-x"].RouteType)
 	}
 
 	metadata, ok := model.ParseSiteModelRouteMetadata(routeByModel["vendor-embedding-x"].RouteRawPayload)

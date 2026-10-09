@@ -231,30 +231,6 @@ func TestResponseModelTracksFinalRequestOverride(t *testing.T) {
 	}
 }
 
-func TestResponseModelImagesProxy(t *testing.T) {
-	for _, streaming := range []bool{false, true} {
-		recorder := httptest.NewRecorder()
-		ginContext, _ := gin.CreateTestContext(recorder)
-		ginContext.Request = httptest.NewRequest(http.MethodPost, "/v1/images/generations", nil)
-		metrics := newImagesRelayMetrics(1, "public-image")
-		metrics.UpstreamRequestModel = "upstream-image"
-		var err error
-		if streaming {
-			body := "event: image_generation.completed\ndata: " + `{"type":"image_generation.completed","model":"returned-image","b64_json":"YQ==","usage":{"input_tokens":10,"output_tokens":2}}` + "\n\n"
-			_, _, err = proxySSE(t.Context(), ginContext, sseTestResponse(body), 0, metrics, nil)
-		} else {
-			body := `{"model":"returned-image","data":[{"b64_json":"YQ=="}],"usage":{"input_tokens":10,"output_tokens":2}}`
-			_, _, err = proxyNonStream(ginContext, &http.Response{StatusCode: 200, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(body))}, metrics)
-		}
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !metrics.ModelMismatch || metrics.UpstreamResponseModel != "returned-image" || !strings.Contains(recorder.Body.String(), `"model":"public-image"`) || !strings.Contains(recorder.Body.String(), `"b64_json":"YQ=="`) {
-			t.Fatalf("image proxy lost model/data: %s %+v", recorder.Body.String(), metrics)
-		}
-	}
-}
-
 func TestResponseModelMismatchResetsAfterFailover(t *testing.T) {
 	ctx := setupRelayTestDB(t)
 	group := &dbmodel.Group{Name: "model-check-failover", Mode: dbmodel.GroupModeFailover}

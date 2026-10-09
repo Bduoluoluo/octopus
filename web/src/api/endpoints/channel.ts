@@ -16,6 +16,18 @@ export enum ChannelType {
     OpenAIEmbedding = 5,
 }
 
+export function isSupportedChannelType(type: number): boolean {
+    return type === ChannelType.OpenAIChat || type === ChannelType.OpenAIResponse || type === ChannelType.Anthropic;
+}
+
+export function channelTypeLabel(type: number): string {
+    const labels: Record<number, string> = {
+        0: 'OpenAI Chat', 1: 'OpenAI Responses', 2: 'Anthropic Messages',
+        3: 'Gemini', 4: 'Volcengine', 5: 'OpenAI Embedding',
+    };
+    return labels[type] ?? `#${type}`;
+}
+
 /**
  * 自动分组类型枚举
  */

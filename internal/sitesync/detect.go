@@ -19,8 +19,7 @@ var urlPlatformHints = []struct {
 	{"api.openai.com", model.SitePlatformAPI, model.SiteModelRouteTypeOpenAIChat},
 	{"api.anthropic.com", model.SitePlatformAPI, model.SiteModelRouteTypeAnthropic},
 	{"anthropic.com/v1", model.SitePlatformAPI, model.SiteModelRouteTypeAnthropic},
-	{"generativelanguage.googleapis.com", model.SitePlatformAPI, model.SiteModelRouteTypeGemini},
-	{"googleapis.com/v1beta/openai", model.SitePlatformAPI, model.SiteModelRouteTypeGemini},
+	{"googleapis.com/v1beta/openai", model.SitePlatformAPI, model.SiteModelRouteTypeOpenAIChat},
 }
 
 var titlePlatformHints = []struct {

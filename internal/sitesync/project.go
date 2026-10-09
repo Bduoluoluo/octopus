@@ -197,6 +197,10 @@ func ProjectAccount(ctx context.Context, accountID int) ([]int, error) {
 				continue
 			}
 
+			if !outbound.IsSupported(existingChannel.Type) {
+				continue
+			}
+
 			updateReq := &model.ChannelUpdateRequest{ID: existingChannel.ID, Name: &channelPayload.Name, Type: &channelPayload.Type, Enabled: &channelPayload.Enabled, BaseUrls: &channelPayload.BaseUrls, Model: &channelPayload.Model, CustomModel: &channelPayload.CustomModel, ProxyMode: &channelPayload.ProxyMode, ProxyConfigID: channelPayload.ProxyConfigID, AutoSync: &channelPayload.AutoSync, CustomHeader: &channelPayload.CustomHeader, BypassManagedCheck: true}
 			updateReq.KeysToAdd, updateReq.KeysToUpdate, updateReq.KeysToDelete = diffManagedChannelKeys(existingChannel.Keys, channelPayload.Keys)
 			if _, err := op.ChannelUpdate(updateReq, ctx); err != nil {
@@ -236,6 +240,9 @@ func ProjectAccount(ctx context.Context, accountID int) ([]int, error) {
 		return nil, err
 	}
 	for _, binding := range existingBindings {
+		if channel, err := op.ChannelGet(binding.ChannelID, ctx); err == nil && !outbound.IsSupported(channel.Type) {
+			continue
+		}
 		bindingKey := model.NormalizeSiteGroupKey(binding.GroupKey)
 		if _, ok := desiredSet[bindingKey]; ok {
 			continue
@@ -360,6 +367,9 @@ func reuseManagedChannelByName(ctx context.Context, siteRecord *model.Site, acco
 	binding, managed, err := op.ChannelManagedBinding(existingChannel.ID, ctx)
 	if err != nil {
 		return nil, false, fmt.Errorf("failed to inspect existing managed channel binding: %w", err)
+	}
+	if !outbound.IsSupported(existingChannel.Type) && !managed {
+		return nil, false, fmt.Errorf("managed channel name %q conflicts with a retired channel", channelPayload.Name)
 	}
 	if managed {
 		if binding.SiteID != siteRecord.ID || binding.SiteAccountID != account.ID {
@@ -518,13 +528,9 @@ func syncProjectedModelPrices(ctx context.Context, modelsByGroup map[string][]mo
 
 func platformOutboundType(site *model.Site) outbound.OutboundType {
 	if site.Platform == model.SitePlatformAPI {
-		switch site.ResolveDefaultRouteType() {
-		case model.SiteModelRouteTypeAnthropic:
-			return outbound.OutboundTypeAnthropic
-		case model.SiteModelRouteTypeGemini:
-			return outbound.OutboundTypeGemini
-		default:
-			return outbound.OutboundTypeOpenAIChat
+		routeType := site.ResolveDefaultRouteType()
+		if routeType == model.SiteModelRouteTypeAnthropic || isRetiredSiteRoute(routeType) {
+			return routeType.ToOutboundType()
 		}
 	}
 	return outbound.OutboundTypeOpenAIChat
@@ -545,9 +551,6 @@ func classifyModelOutboundType(modelName string) outbound.OutboundType {
 	if strings.HasPrefix(lower, "claude") {
 		return outbound.OutboundTypeAnthropic
 	}
-	if strings.HasPrefix(lower, "gemini") {
-		return outbound.OutboundTypeGemini
-	}
 	return outbound.OutboundTypeOpenAIChat
 }
 
@@ -559,6 +562,9 @@ func classifyModelRouteType(modelName string) model.SiteModelRouteType {
 func partitionModelsByOutboundType(modelNames []string, split bool, site *model.Site) map[outbound.OutboundType][]string {
 	if !split {
 		obType := platformOutboundType(site)
+		if !outbound.IsSupported(obType) {
+			return map[outbound.OutboundType][]string{}
+		}
 		return map[outbound.OutboundType][]string{obType: modelNames}
 	}
 	buckets := make(map[outbound.OutboundType][]string)
@@ -571,6 +577,12 @@ func partitionModelsByOutboundType(modelNames []string, split bool, site *model.
 
 func partitionSiteModelsByRouteType(items []model.SiteModel, split bool, site *model.Site) map[model.SiteModelRouteType][]model.SiteModel {
 	if !split {
+		if !outbound.IsSupported(platformOutboundType(site)) {
+			return map[model.SiteModelRouteType][]model.SiteModel{}
+		}
+		items = slices.DeleteFunc(slices.Clone(items), func(item model.SiteModel) bool {
+			return outbound.IsRetired(item.RouteType.ToOutboundType()) || hasRetiredEndpointMetadata(item.RouteRawPayload)
+		})
 		routeType := model.SiteModelRouteTypeFromOutboundType(platformOutboundType(site))
 		if len(items) == 0 {
 			return map[model.SiteModelRouteType][]model.SiteModel{}
@@ -656,7 +668,13 @@ func rewriteManagedGroupItemsForAccount(ctx context.Context, siteRecord *model.S
 	}
 	channelIDs := make([]int, 0, len(bindings))
 	for _, binding := range bindings {
+		if channel, err := op.ChannelGet(binding.ChannelID, ctx); err == nil && !outbound.IsSupported(channel.Type) {
+			continue
+		}
 		channelIDs = append(channelIDs, binding.ChannelID)
+	}
+	if len(channelIDs) == 0 {
+		return nil
 	}
 	var items []model.GroupItem
 	if err := db.GetDB().WithContext(ctx).Where("channel_id IN ?", channelIDs).Find(&items).Error; err != nil {

@@ -32,10 +32,10 @@ func TestPickPreferredDetectedRouteType(t *testing.T) {
 			expected:  model.SiteModelRouteTypeOpenAIChat,
 		},
 		{
-			name:      "gemini keeps native route when available",
+			name:      "gemini model uses advertised chat route",
 			modelName: "gemini-2.0-flash",
 			values:    []model.SiteModelRouteType{model.SiteModelRouteTypeOpenAIChat, model.SiteModelRouteTypeGemini},
-			expected:  model.SiteModelRouteTypeGemini,
+			expected:  model.SiteModelRouteTypeOpenAIChat,
 		},
 		{
 			name:      "gpt prefers response over chat",
@@ -93,10 +93,10 @@ func TestBuildSiteModelRouteDetectionGuessesRouteFromModelName(t *testing.T) {
 		expected               model.SiteModelRouteType
 	}{
 		{
-			name:                   "unmappable endpoint types fall back to embedding guess",
+			name:                   "unmappable endpoint types fall back to chat without filtering model names",
 			modelName:              "vendor-embedding-x",
 			supportedEndpointTypes: []string{"/vendor/embeddings"},
-			expected:               model.SiteModelRouteTypeOpenAIEmbedding,
+			expected:               model.SiteModelRouteTypeOpenAIChat,
 		},
 		{
 			name:                   "unmappable endpoint types fall back to anthropic guess",

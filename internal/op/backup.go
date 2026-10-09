@@ -12,6 +12,7 @@ import (
 
 	"github.com/xuanli27/octopus/internal/db"
 	"github.com/xuanli27/octopus/internal/model"
+	"github.com/xuanli27/octopus/internal/transformer/outbound"
 	"github.com/xuanli27/octopus/internal/utils/log"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -152,6 +153,12 @@ func DBImportIncremental(ctx context.Context, dump *model.DBDump) (*model.DBImpo
 		return nil, fmt.Errorf("unsupported dump version: %d", dump.Version)
 	}
 
+	for _, channel := range dump.Channels {
+		if !outbound.IsSupported(channel.Type) && !outbound.IsRetired(channel.Type) {
+			return nil, fmt.Errorf("%w in backup: %d", model.ErrUnsupportedChannelType, channel.Type)
+		}
+	}
+
 	conn := db.GetDB().WithContext(ctx)
 	res := &model.DBImportResult{RowsAffected: map[string]int64{}}
 	routeGroupMutationMu.Lock()
@@ -229,6 +236,11 @@ func DBImportIncremental(ctx context.Context, dump *model.DBDump) (*model.DBImpo
 			}
 			if err := tx.Omit("Keys", "Stats").Create(&ch).Error; err != nil {
 				return fmt.Errorf("import channels: %w", err)
+			}
+			if outbound.IsRetired(ch.Type) && !dump.Channels[i].Enabled {
+				if err := tx.Model(&ch).Update("enabled", false).Error; err != nil {
+					return fmt.Errorf("import retired channel enabled state: %w", err)
+				}
 			}
 			channelIDMap[oldID] = ch.ID
 			res.RowsAffected["channels"]++

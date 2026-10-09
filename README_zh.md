@@ -2,6 +2,10 @@
 
 LLM API 聚合、协议转换和负载均衡服务。
 
+运行协议仅保留 OpenAI Chat Completions、OpenAI Responses 和 Anthropic Messages。Responses WebSocket 与 `/v1/responses/compact` 保留。旧 Gemini/Volcengine/Embedding 渠道仍可查看，但不能新建或启用；独立 Images 接口已移除。这些厂商的模型仍可通过三种标准协议接入。
+
+迁移来源、能力边界和验证结果见[协议迁移记录](docs/protocol-migration.md)。
+
 路由页可以建立多个路由分组，在不同分组中配置同名模型及不同的上游渠道；每个 API 密钥在设置中绑定一个分组。旧路由和旧密钥自动归入不可删除的 `default` 分组。删除自建分组会删除其中路由，须先把已绑定的密钥改绑到其他分组。
 
 各路由分组的自动分组配置独立保存，包括渠道匹配方式、站点投影默认模式、自动创建缺失模型和模型名归一化。旧配置归于 `default`；其他分组默认关闭，需要各自配置。渠道同步会按每个分组的规则更新。

@@ -3,11 +3,11 @@ package handlers
 import (
 	"net/http"
 
+	"github.com/gin-gonic/gin"
 	"github.com/xuanli27/octopus/internal/relay"
 	"github.com/xuanli27/octopus/internal/server/middleware"
 	"github.com/xuanli27/octopus/internal/server/router"
 	"github.com/xuanli27/octopus/internal/transformer/inbound"
-	"github.com/gin-gonic/gin"
 )
 
 func init() {
@@ -29,10 +29,6 @@ func init() {
 		AddRoute(
 			router.NewRoute("/messages", http.MethodPost).
 				Handle(message),
-		).
-		AddRoute(
-			router.NewRoute("/embeddings", http.MethodPost).
-				Handle(embedding),
 		)
 
 	// WebSocket route for /v1/responses (no RequireJSON middleware)
@@ -55,9 +51,6 @@ func responseCompact(c *gin.Context) {
 }
 func message(c *gin.Context) {
 	relay.Handler(inbound.InboundTypeAnthropic, c)
-}
-func embedding(c *gin.Context) {
-	relay.Handler(inbound.InboundTypeOpenAIEmbedding, c)
 }
 func wsResponse(c *gin.Context) {
 	relay.HandleWSResponse(c)

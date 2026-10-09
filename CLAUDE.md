@@ -69,7 +69,7 @@ Octopus 是一个 **LLM API 聚合与负载均衡服务**。Go 后端 (Gin + GOR
 | `server/auth/` | JWT 生成/验证，API Key 格式 `sk-octopus-*` |
 | `server/resp/` | 统一响应格式 `{code, message, data}` |
 | `relay/` | API 代理核心，负载均衡策略 (RoundRobin/Random/Failover/Weighted)，熔断器 |
-| `transformer/` | 协议转换适配器，`inbound/` 解析请求，`outbound/` 格式化响应，支持 OpenAI/Anthropic/Gemini |
+| `transformer/` | 三协议兼容门面与唯一 IR；`protocol/` 实现 OpenAI Chat、Responses、Anthropic Messages 编解码 |
 | `task/` | 后台定时任务 (统计持久化、模型同步、价格更新) |
 | `client/` | LLM 提供商 HTTP 客户端封装 |
 | `utils/log/` | Zap 结构化日志 |

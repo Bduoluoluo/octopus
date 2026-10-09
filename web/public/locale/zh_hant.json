@@ -840,7 +840,7 @@
     "test": {
       "title": "模型測試",
       "hint": "使用目前表單設定發送真實請求，無需先儲存；測試可能產生上游費用。",
-      "unsupported": "暫不支援 Embedding 渠道的模型測試。",
+      "unsupported": "此渠道協議已退役或不受支援，無法進行模型測試。",
       "timeoutLabel": "單次逾時：",
       "keyLabel": "測試 Key",
       "modelCount": "{total} 個模型（上游 {sync} + 自訂 {custom}）",
@@ -941,6 +941,8 @@
       "modelSelected": "已選模型",
       "modelNoSelected": "暫未選擇模型",
       "modelClearAll": "清除全部",
+      "retiredType": "{type}（已退役）",
+      "retiredHint": "此協議已停止執行，歷史設定保持不變。可停用、刪除，或手動改為支援的協議。",
       "typeOpenAIChat": "OpenAI Chat",
       "typeOpenAIResponse": "OpenAI Response",
       "typeOpenAIEmbedding": "OpenAI Embedding",

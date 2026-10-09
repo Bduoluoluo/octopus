@@ -1,17 +1,19 @@
 import type { SiteModelRouteSource, SiteModelRouteType } from '@/api/endpoints/site-channel';
 import { ChannelType } from '@/api/endpoints/channel';
 
-export const SITE_ROUTE_COLUMN_ORDER: SiteModelRouteType[] = [
+type ActiveSiteRouteType = 'openai_chat' | 'openai_response' | 'anthropic';
+
+export const SITE_ROUTE_COLUMN_ORDER: ActiveSiteRouteType[] = [
     'openai_chat',
     'openai_response',
     'anthropic',
-    'gemini',
-    'volcengine',
-    'openai_embedding',
 ];
 
 export const SITE_ROUTE_DISPLAY_ORDER: SiteModelRouteType[] = [
     ...SITE_ROUTE_COLUMN_ORDER,
+    'gemini',
+    'volcengine',
+    'openai_embedding',
     'unknown',
 ];
 
@@ -45,8 +47,8 @@ export function getRouteTypeTone(routeType: SiteModelRouteType) {
     }
 }
 
-export function isSupportedRouteType(routeType: SiteModelRouteType): routeType is Exclude<SiteModelRouteType, 'unknown'> {
-    return routeType !== 'unknown';
+export function isSupportedRouteType(routeType: SiteModelRouteType): routeType is ActiveSiteRouteType {
+    return routeType === 'openai_chat' || routeType === 'openai_response' || routeType === 'anthropic';
 }
 
 export function getRouteSourceTone(routeSource: SiteModelRouteSource) {

@@ -90,11 +90,11 @@ export function routeTypeLabel(routeType: SiteModelRouteType) {
         case 'anthropic':
             return 'Anthropic';
         case 'gemini':
-            return 'Gemini';
+            return 'Gemini (retired)';
         case 'volcengine':
-            return 'Volcengine';
+            return 'Volcengine (retired)';
         case 'openai_embedding':
-            return 'OpenAI Embedding';
+            return 'OpenAI Embedding (retired)';
         default:
             return 'OpenAI Chat';
     }

@@ -1,4 +1,4 @@
-import { ChannelType, type AutoGroupType, type Channel, type ChannelWSMode, useFetchModel } from '@/api/endpoints/channel';
+import { ChannelType, isSupportedChannelType, channelTypeLabel, type AutoGroupType, type Channel, type ChannelWSMode, useFetchModel } from '@/api/endpoints/channel';
 import { ProxySelector } from '@/components/modules/proxy-pool/ProxySelector';
 import { TestPanel } from './TestPanel';
 import {
@@ -285,11 +285,12 @@ export function ChannelForm({
                             <SelectItem className='rounded-xl' value={String(ChannelType.OpenAIChat)}>{t('typeOpenAIChat')}</SelectItem>
                             <SelectItem className='rounded-xl' value={String(ChannelType.OpenAIResponse)}>{t('typeOpenAIResponse')}</SelectItem>
                             <SelectItem className='rounded-xl' value={String(ChannelType.Anthropic)}>{t('typeAnthropic')}</SelectItem>
-                            <SelectItem className='rounded-xl' value={String(ChannelType.Gemini)}>{t('typeGemini')}</SelectItem>
-                            <SelectItem className='rounded-xl' value={String(ChannelType.Volcengine)}>{t('typeVolcengine')}</SelectItem>
-                            <SelectItem className='rounded-xl' value={String(ChannelType.OpenAIEmbedding)}>{t('typeOpenAIEmbedding')}</SelectItem>
+                            {!isSupportedChannelType(formData.type) && (
+                                <SelectItem disabled value={String(formData.type)}>{t('retiredType', { type: channelTypeLabel(formData.type) })}</SelectItem>
+                            )}
                         </SelectContent>
                     </Select>
+                    {!isSupportedChannelType(formData.type) && <p className="text-xs text-destructive">{t('retiredHint')}</p>}
                 </div>
             </div>
 
@@ -399,7 +400,7 @@ export function ChannelForm({
                         variant="ghost"
                         size="sm"
                         onClick={handleRefreshModels}
-                        disabled={!formData.base_urls?.[0]?.url || !effectiveKey || fetchModel.isPending}
+                        disabled={!isSupportedChannelType(formData.type) || !formData.base_urls?.[0]?.url || !effectiveKey || fetchModel.isPending}
                         className="h-6 px-2 text-xs text-muted-foreground/50 hover:text-muted-foreground hover:bg-transparent"
                     >
                         <RefreshCw className={`h-3 w-3 mr-1 ${fetchModel.isPending ? 'animate-spin' : ''}`} />
@@ -673,6 +674,7 @@ export function ChannelForm({
                 <label className="flex items-center gap-2 cursor-pointer">
                     <Switch
                         checked={formData.enabled}
+                        disabled={!formData.enabled && !isSupportedChannelType(formData.type)}
                         onCheckedChange={(checked) => onFormDataChange({ ...formData, enabled: checked })}
                     />
                     <span className="text-sm font-medium text-card-foreground">{t('enabled')}</span>

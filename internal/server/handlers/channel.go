@@ -118,7 +118,7 @@ func createChannel(c *gin.Context) {
 		channel.ProxyConfigID = nil
 	}
 	if err := op.ChannelCreate(&channel, c.Request.Context()); err != nil {
-		if errors.Is(err, model.ErrInvalidCacheRatio) {
+		if errors.Is(err, model.ErrInvalidCacheRatio) || errors.Is(err, model.ErrUnsupportedChannelType) {
 			resp.Error(c, http.StatusBadRequest, err.Error())
 			return
 		}
@@ -148,7 +148,7 @@ func updateChannel(c *gin.Context) {
 	}
 	channel, err := op.ChannelUpdate(&req, c.Request.Context())
 	if err != nil {
-		if errors.Is(err, model.ErrInvalidCacheRatio) {
+		if errors.Is(err, model.ErrInvalidCacheRatio) || errors.Is(err, model.ErrUnsupportedChannelType) {
 			resp.Error(c, http.StatusBadRequest, err.Error())
 			return
 		}
@@ -180,6 +180,10 @@ func enableChannel(c *gin.Context) {
 		return
 	}
 	if err := op.ChannelEnabled(request.ID, request.Enabled, c.Request.Context()); err != nil {
+		if errors.Is(err, model.ErrUnsupportedChannelType) {
+			resp.Error(c, http.StatusBadRequest, err.Error())
+			return
+		}
 		resp.ErrorWithAppError(c, http.StatusInternalServerError, channelError(codeChannelUpdateFailed, "channel update failed", err))
 		return
 	}

@@ -25,8 +25,6 @@ func TestBuildTestRequestProtocols(t *testing.T) {
 		{"chat", outbound.OutboundTypeOpenAIChat, "/v1/responses", "Authorization", "Bearer test-key", "input"},
 		{"responses", outbound.OutboundTypeOpenAIResponse, "/v1/responses", "Authorization", "Bearer test-key", "input"},
 		{"anthropic", outbound.OutboundTypeAnthropic, "/v1/messages", "X-Api-Key", "test-key", "messages"},
-		{"gemini", outbound.OutboundTypeGemini, "/v1beta/models/test-model:generateContent", "X-Goog-Api-Key", "test-key", "contents"},
-		{"volcengine", outbound.OutboundTypeVolcengine, "/v3/chat/completions", "Authorization", "Bearer test-key", "messages"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -50,7 +48,7 @@ func TestBuildTestRequestProtocols(t *testing.T) {
 			}
 		})
 	}
-	for _, channelType := range []outbound.OutboundType{outbound.OutboundTypeOpenAIEmbedding, 99} {
+	for _, channelType := range []outbound.OutboundType{outbound.OutboundTypeGemini, outbound.OutboundTypeVolcengine, outbound.OutboundTypeOpenAIEmbedding, 99} {
 		if _, err := buildTestRequest(context.Background(), channelType, "https://example.com", "key", "model"); err == nil {
 			t.Fatalf("expected unsupported type error for %d", channelType)
 		}

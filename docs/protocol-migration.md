@@ -79,6 +79,14 @@ Raw passthrough is still raw output with the existing controlled model rewrite. 
 
 `go test -mod=readonly ./internal/relay/... -count=1` passes on Go 1.25.0, including existing WS/replay, model mapping, failover/timeout, heartbeat and metrics tests. New lifecycle tests verify merged/event-only frames, single consumption, partial cancellation, missing terminal, Close errors and attempt reset. Full race detects the pre-existing `TestEarlyHeartbeat_DelayedFirstHeartbeat` recorder race; the same failure was reproduced in the pristine baseline. All protocol/transformer/balancer/stream packages pass race. The existing test was not deleted or weakened.
 
-### Rollback procedure
+### P5: runtime retirement and historical data
+
+Factories now register only inbound/outbound 0/1/2. Historical outbound 3/4/5 and inbound 3 remain reserved and are never reused. Native Gemini/Volcengine/Embedding codecs and independent Images endpoints are removed; the retained POSTs, compact, GET Responses WS and models/admin routes are asserted by tests.
+
+Create/enable and manual type changes reject unsupported protocols. Disabled/deleted/exported historical records remain manageable; backup import retains known retired type IDs and their original enabled state. No upgrade code rewrites channels or removes memberships. Projection and sync skip retired runtime buckets while preserving their saved bindings/group references. Model/vendor names are not filtered.
+
+Affected op/sitesync/model/helper/grouphealth/handler/registry packages pass their tests under Go 1.25.0. Retired codec-only tests were removed with those implementations; mixed business tests retain active-protocol assertions and change only retirement expectations. Frontend TypeScript and production build pass using the locked pnpm 11.1.2 project. The machine uses Node 24.16.0 instead of the declared Node 22; the build warns but succeeds. The read-only local SQLite audit reports no retired channels or affected groups.
+
+### Deployment rollback
 
 Before deployment, back up database and configuration. Revert migration commits in reverse stage order or deploy the baseline image. Do not renumber, delete or rewrite persisted channel types. Preserve the user-owned task specification and unrelated changes during rollback.

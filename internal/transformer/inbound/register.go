@@ -9,17 +9,16 @@ import (
 type InboundType int
 
 const (
-	InboundTypeOpenAIChat InboundType = iota
-	InboundTypeOpenAIResponse
-	InboundTypeAnthropic
-	InboundTypeOpenAIEmbedding
+	InboundTypeOpenAIChat      InboundType = 0
+	InboundTypeOpenAIResponse  InboundType = 1
+	InboundTypeAnthropic       InboundType = 2
+	InboundTypeOpenAIEmbedding InboundType = 3
 )
 
 var inboundFactories = map[InboundType]func() model.Inbound{
-	InboundTypeOpenAIChat:      func() model.Inbound { return &openai.ChatInbound{} },
-	InboundTypeOpenAIResponse:  func() model.Inbound { return &openai.ResponseInbound{} },
-	InboundTypeOpenAIEmbedding: func() model.Inbound { return &openai.EmbeddingInbound{} },
-	InboundTypeAnthropic:       func() model.Inbound { return &anthropic.MessagesInbound{} },
+	InboundTypeOpenAIChat:     func() model.Inbound { return &openai.ChatInbound{} },
+	InboundTypeOpenAIResponse: func() model.Inbound { return &openai.ResponseInbound{} },
+	InboundTypeAnthropic:      func() model.Inbound { return &anthropic.MessagesInbound{} },
 }
 
 func Get(inboundType InboundType) model.Inbound {

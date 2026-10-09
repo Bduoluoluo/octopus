@@ -49,6 +49,9 @@ func ChannelCreate(channel *model.Channel, ctx context.Context) error {
 	if channel == nil {
 		return fmt.Errorf("channel is nil")
 	}
+	if !model2.IsSupported(channel.Type) {
+		return fmt.Errorf("%w: %d", model.ErrUnsupportedChannelType, channel.Type)
+	}
 	if err := channel.ValidateCacheRatio(); err != nil {
 		return err
 	}
@@ -184,6 +187,16 @@ func ChannelUpdate(req *model.ChannelUpdateRequest, ctx context.Context) (*model
 		return nil, fmt.Errorf("channel not found")
 	}
 	normalizeChannelProxyFields(&existingChannel)
+	effectiveType := existingChannel.Type
+	if req.Type != nil {
+		effectiveType = *req.Type
+		if effectiveType != existingChannel.Type && !model2.IsSupported(effectiveType) {
+			return nil, fmt.Errorf("%w: %d", model.ErrUnsupportedChannelType, effectiveType)
+		}
+	}
+	if req.Enabled != nil && *req.Enabled && !model2.IsSupported(effectiveType) {
+		return nil, fmt.Errorf("%w: %d", model.ErrUnsupportedChannelType, effectiveType)
+	}
 	cacheRatio := existingChannel
 	if req.CacheRatioEnabled != nil {
 		cacheRatio.CacheRatioEnabled = *req.CacheRatioEnabled
@@ -400,9 +413,12 @@ func ChannelUpdate(req *model.ChannelUpdateRequest, ctx context.Context) (*model
 }
 
 func ChannelEnabled(id int, enabled bool, ctx context.Context) error {
-	_, ok := channelCache.Get(id)
+	channel, ok := channelCache.Get(id)
 	if !ok {
 		return fmt.Errorf("channel not found")
+	}
+	if enabled && !model2.IsSupported(channel.Type) {
+		return fmt.Errorf("%w: %d", model.ErrUnsupportedChannelType, channel.Type)
 	}
 	if _, managed, err := ChannelManagedBinding(id, ctx); err != nil {
 		return err
@@ -420,9 +436,12 @@ func ChannelEnabled(id int, enabled bool, ctx context.Context) error {
 }
 
 func ChannelEnabledManaged(id int, enabled bool, ctx context.Context) error {
-	_, ok := channelCache.Get(id)
+	channel, ok := channelCache.Get(id)
 	if !ok {
 		return fmt.Errorf("channel not found")
+	}
+	if enabled && !model2.IsSupported(channel.Type) {
+		return fmt.Errorf("%w: %d", model.ErrUnsupportedChannelType, channel.Type)
 	}
 	if err := db.GetDB().WithContext(ctx).Model(&model.Channel{}).Where("id = ?", id).Update("enabled", enabled).Error; err != nil {
 		return err

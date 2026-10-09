@@ -7,7 +7,7 @@ import {
 } from '@/components/ui/morphing-dialog';
 import { CheckCircle2, DollarSign, Key, Layers, MessageSquare, ShieldAlert, XCircle } from 'lucide-react';
 import { type StatsMetricsFormatted } from '@/api/endpoints/stats';
-import { type Channel, useEnableChannel } from '@/api/endpoints/channel';
+import { type Channel, useEnableChannel, isSupportedChannelType, channelTypeLabel } from '@/api/endpoints/channel';
 import { useRuntimeOverview } from '@/api/endpoints/runtime';
 import { CardContent } from './CardContent';
 import { useTranslations } from 'next-intl';
@@ -66,6 +66,7 @@ export function Card({ channel, stats, layout = 'grid' }: { channel: Channel; st
         <MorphingDialog>
             <MorphingDialogTrigger className="w-full">
                 <article className="flex flex-col gap-4 rounded-3xl border border-border bg-card text-card-foreground p-4 transition-all duration-300">
+                    {!isSupportedChannelType(channel.type) && <p className="text-xs text-destructive">{tForm('retiredType', { type: channelTypeLabel(channel.type) })}</p>}
                     <header className="relative flex items-center justify-between gap-2">
                         <div className="min-w-0 flex-1">
                             <Tooltip side="top" sideOffset={10} align="center">
@@ -100,7 +101,7 @@ export function Card({ channel, stats, layout = 'grid' }: { channel: Channel; st
                         <Switch
                             checked={channel.enabled}
                             onCheckedChange={handleEnableChange}
-                            disabled={enableChannel.isPending || channel.managed}
+                            disabled={enableChannel.isPending || channel.managed || (!channel.enabled && !isSupportedChannelType(channel.type))}
                             onClick={(e) => e.stopPropagation()}
                         />
                     </header>

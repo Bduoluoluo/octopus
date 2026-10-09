@@ -2,11 +2,14 @@ package model
 
 import (
 	"encoding/json"
+	"errors"
 	"strconv"
 	"strings"
 
 	"github.com/xuanli27/octopus/internal/transformer/outbound"
 )
+
+var ErrUnsupportedChannelType = errors.New("unsupported channel type")
 
 type AutoGroupType int
 

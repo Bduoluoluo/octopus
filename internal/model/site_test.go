@@ -179,8 +179,8 @@ func TestInferSiteModelRouteType(t *testing.T) {
 		expected  SiteModelRouteType
 	}{
 		{name: "anthropic models stay anthropic", modelName: "claude-3-5-sonnet", expected: SiteModelRouteTypeAnthropic},
-		{name: "gemini models stay gemini", modelName: "gemini-2.0-flash", expected: SiteModelRouteTypeGemini},
-		{name: "embedding models use embedding route", modelName: "text-embedding-3-large", expected: SiteModelRouteTypeOpenAIEmbedding},
+		{name: "gemini model name does not select retired protocol", modelName: "gemini-2.0-flash", expected: SiteModelRouteTypeOpenAIChat},
+		{name: "model name does not select embedding protocol", modelName: "text-embedding-3-large", expected: SiteModelRouteTypeOpenAIChat},
 		{name: "gpt 4o defaults to chat without metadata", modelName: "gpt-4o-mini", expected: SiteModelRouteTypeOpenAIChat},
 		{name: "gpt 4.1 defaults to chat without metadata", modelName: "gpt-4.1", expected: SiteModelRouteTypeOpenAIChat},
 		{name: "gpt 5 defaults to chat without metadata", modelName: "gpt-5-mini", expected: SiteModelRouteTypeOpenAIChat},

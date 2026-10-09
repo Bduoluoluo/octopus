@@ -643,6 +643,9 @@ func upsertImportedSite(tx *gorm.DB, input importedSiteInput) (*model.Site, bool
 	if err := siteRecord.Validate(); err != nil {
 		return nil, false, err
 	}
+	if !model.IsProjectedSiteModelRouteType(siteRecord.ResolveDefaultRouteType()) {
+		return nil, false, fmt.Errorf("unsupported site default route type: %s", siteRecord.ResolveDefaultRouteType())
+	}
 	if err := tx.Create(&siteRecord).Error; err != nil {
 		return nil, false, fmt.Errorf("create site failed: %w", err)
 	}

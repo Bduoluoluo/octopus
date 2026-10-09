@@ -101,18 +101,12 @@ func TestRunCandidateResponsesStream(t *testing.T) {
 	}
 }
 
-func TestBuildProbeRequestForEmbeddings(t *testing.T) {
-	channel := &model.Channel{
-		Type:     outbound.OutboundTypeOpenAIEmbedding,
-		BaseUrls: []model.BaseUrl{{URL: "https://example.com/v1"}},
-	}
-	usedKey := &model.ChannelKey{ID: 1, ChannelKey: "sk-test"}
-
-	req, err := buildProbeRequest(context.Background(), channel, usedKey, "text-embedding-3-large")
-	if err != nil {
-		t.Fatalf("buildProbeRequest returned error: %v", err)
-	}
-	if req.URL.Path != "/v1/embeddings" {
-		t.Fatalf("expected /v1/embeddings, got %s", req.URL.Path)
+func TestBuildProbeRequestRejectsRetiredProtocols(t *testing.T) {
+	for _, channelType := range []outbound.OutboundType{outbound.OutboundTypeGemini, outbound.OutboundTypeVolcengine, outbound.OutboundTypeOpenAIEmbedding, 99} {
+		channel := &model.Channel{Type: channelType, BaseUrls: []model.BaseUrl{{URL: "https://example.com/v1"}}}
+		usedKey := &model.ChannelKey{ID: 1, ChannelKey: "sk-test"}
+		if _, err := buildProbeRequest(context.Background(), channel, usedKey, "vendor-model"); err == nil {
+			t.Fatalf("expected unsupported type error for %d", channelType)
+		}
 	}
 }

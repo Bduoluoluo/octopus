@@ -47,8 +47,8 @@ func TestApplyPersistedRouteStateGuessesLegacyUnknownRoute(t *testing.T) {
 
 	applyPersistedRouteState(item, existing, time.Unix(1711929600, 0))
 
-	if item.RouteType != model.SiteModelRouteTypeOpenAIEmbedding {
-		t.Fatalf("expected legacy unknown route to be guessed as %q, got %q", model.SiteModelRouteTypeOpenAIEmbedding, item.RouteType)
+	if item.RouteType != model.SiteModelRouteTypeOpenAIChat {
+		t.Fatalf("expected legacy unknown route to be guessed as %q, got %q", model.SiteModelRouteTypeOpenAIChat, item.RouteType)
 	}
 	metadata, ok := model.ParseSiteModelRouteMetadata(item.RouteRawPayload)
 	if !ok {
@@ -57,8 +57,8 @@ func TestApplyPersistedRouteStateGuessesLegacyUnknownRoute(t *testing.T) {
 	if !metadata.RouteSupported || !metadata.RouteGuessed {
 		t.Fatalf("expected guessed route metadata to mark supported name guess, got %+v", metadata)
 	}
-	if metadata.RouteType != model.SiteModelRouteTypeOpenAIEmbedding {
-		t.Fatalf("expected guessed metadata route type %q, got %q", model.SiteModelRouteTypeOpenAIEmbedding, metadata.RouteType)
+	if metadata.RouteType != model.SiteModelRouteTypeOpenAIChat {
+		t.Fatalf("expected guessed metadata route type %q, got %q", model.SiteModelRouteTypeOpenAIChat, metadata.RouteType)
 	}
 }
 

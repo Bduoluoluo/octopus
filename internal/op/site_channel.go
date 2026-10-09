@@ -489,8 +489,11 @@ func SiteManualModelsAdd(siteID int, accountID int, req *model.SiteManualModelAd
 			return fmt.Errorf("duplicate model in request: %s", modelName)
 		}
 		seen[modelName] = struct{}{}
-		routeType := model.NormalizeSiteModelRouteType(item.RouteType)
-		if routeType == model.SiteModelRouteTypeUnknown {
+		routeType := item.RouteType
+		if routeType == "" {
+			routeType = model.SiteModelRouteTypeOpenAIChat
+		}
+		if !model.IsProjectedSiteModelRouteType(routeType) {
 			return fmt.Errorf("unsupported route type for model %s", modelName)
 		}
 		rows = append(rows, model.SiteModel{

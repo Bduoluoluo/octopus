@@ -840,7 +840,7 @@
     "test": {
       "title": "模型测试",
       "hint": "使用当前表单配置发送真实请求，无需先保存；测试可能产生上游费用。",
-      "unsupported": "暂不支持 Embedding 渠道的模型测试。",
+      "unsupported": "该渠道协议已退役或不受支持，无法进行模型测试。",
       "timeoutLabel": "单次超时：",
       "keyLabel": "测试 Key",
       "modelCount": "{total} 个模型（上游 {sync} + 自定义 {custom}）",
@@ -941,6 +941,8 @@
       "modelSelected": "已选模型",
       "modelNoSelected": "暂未选择模型",
       "modelClearAll": "清除全部",
+      "retiredType": "{type}（已退役）",
+      "retiredHint": "该协议已停止运行，历史配置保持不变。可禁用、删除，或手动改为支持的协议。",
       "typeOpenAIChat": "OpenAI Chat",
       "typeOpenAIResponse": "OpenAI Response",
       "typeOpenAIEmbedding": "OpenAI Embedding",

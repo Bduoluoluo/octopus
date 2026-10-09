@@ -43,20 +43,9 @@ func TestAppendPromptSuffixJSON(t *testing.T) {
 			want:        `{"messages":[{"role":"user","content":[{"type":"text","text":"hi"},{"type":"text","text":"-suffix"}]}]}`,
 		},
 		{
-			name:        "gemini",
-			channelType: outbound.OutboundTypeGemini,
-			body:        `{"contents":[{"role":"user","parts":[{"text":"hi"},{"inlineData":{"data":"abc"}}]}]}`,
-			want:        `{"contents":[{"role":"user","parts":[{"text":"hi"},{"inlineData":{"data":"abc"}},{"text":"-suffix"}]}]}`,
-		},
-		{
 			name: "responses string and precision", channelType: outbound.OutboundTypeOpenAIResponse,
 			body: `{"input":"hi","instructions":"keep","extra":{"integer":9007199254740993}}`,
 			want: `{"input":"hi-suffix","instructions":"keep","extra":{"integer":9007199254740993}}`,
-		},
-		{
-			name: "volcengine responses", channelType: outbound.OutboundTypeVolcengine,
-			body: `{"input":[{"type":"message","role":"user","content":"hi"}]}`,
-			want: `{"input":[{"type":"message","role":"user","content":"hi-suffix"}]}`,
 		},
 		{
 			name: "chat channel responses probe", channelType: outbound.OutboundTypeOpenAIChat,
@@ -77,11 +66,6 @@ func TestAppendPromptSuffixJSON(t *testing.T) {
 			name: "anthropic tool result turn", channelType: outbound.OutboundTypeAnthropic,
 			body: `{"messages":[{"role":"user","content":"question"},{"role":"assistant","content":[{"type":"thinking","thinking":"keep","signature":"keep"}]},{"role":"user","content":[{"type":"tool_result","tool_use_id":"call_1","content":"result"}]}]}`,
 			want: `{"messages":[{"role":"user","content":"question-suffix"},{"role":"assistant","content":[{"type":"thinking","thinking":"keep","signature":"keep"}]},{"role":"user","content":[{"type":"tool_result","tool_use_id":"call_1","content":"result"}]}]}`,
-		},
-		{
-			name: "gemini tool result turn", channelType: outbound.OutboundTypeGemini,
-			body: `{"contents":[{"parts":[{"text":"question"}]},{"role":"model","parts":[{"functionCall":{"name":"lookup"},"thoughtSignature":"keep"}]},{"role":"user","parts":[{"functionResponse":{"name":"lookup","response":{"text":"keep"}}}]}]}`,
-			want: `{"contents":[{"parts":[{"text":"question"},{"text":"-suffix"}]},{"role":"model","parts":[{"functionCall":{"name":"lookup"},"thoughtSignature":"keep"}]},{"role":"user","parts":[{"functionResponse":{"name":"lookup","response":{"text":"keep"}}}]}]}`,
 		},
 	}
 
@@ -124,6 +108,8 @@ func TestPromptSuffixSkipsRequestsWithoutUserContent(t *testing.T) {
 		{outbound.OutboundTypeOpenAIChat, `{"messages":[null,{"role":"user","content":null}]}`},
 		{outbound.OutboundTypeAnthropic, `{"messages":[{"role":"user","content":[{"type":"tool_result","content":"keep"}]}]}`},
 		{outbound.OutboundTypeGemini, `{"contents":[null,{"role":"user","parts":[{"functionResponse":{"name":"lookup","response":{"text":"keep"}}}]}]}`},
+		{outbound.OutboundTypeGemini, `{"contents":[{"role":"user","parts":[{"text":"keep"}]}]}`},
+		{outbound.OutboundTypeVolcengine, `{"input":"keep"}`},
 		{outbound.OutboundTypeOpenAIEmbedding, `{"input":"keep"}`},
 		{outbound.OutboundTypeOpenAIEmbedding, `invalid JSON is not parsed`},
 		{outbound.OutboundType(99), `{"input":"keep"}`},

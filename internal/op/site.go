@@ -100,6 +100,10 @@ func SiteCreate(site *model.Site, ctx context.Context) error {
 	if site == nil {
 		return fmt.Errorf("site is nil")
 	}
+	site.Normalize()
+	if !model.IsProjectedSiteModelRouteType(site.ResolveDefaultRouteType()) {
+		return fmt.Errorf("unsupported site default route type: %s", site.ResolveDefaultRouteType())
+	}
 	if err := site.Validate(); err != nil {
 		return err
 	}
@@ -191,9 +195,34 @@ func SiteUpdate(req *model.SiteUpdateRequest, ctx context.Context) (*model.Site,
 		selectFields = append(selectFields, "tags")
 	}
 	if len(selectFields) > 0 {
-		if err := merged.Validate(); err != nil {
+		validationCopy := merged
+		validationCopy.RouteBaseURLs = nil
+		for _, route := range merged.RouteBaseURLs {
+			preserved := false
+			if !model.IsProjectedSiteModelRouteType(route.RouteType) {
+				for _, existing := range site.RouteBaseURLs {
+					if route == existing {
+						preserved = true
+						break
+					}
+				}
+			}
+			if !preserved {
+				validationCopy.RouteBaseURLs = append(validationCopy.RouteBaseURLs, route)
+			}
+		}
+		if err := validationCopy.Validate(); err != nil {
 			return nil, err
 		}
+		if req.Enabled != nil && *req.Enabled && !model.IsProjectedSiteModelRouteType(validationCopy.ResolveDefaultRouteType()) {
+			return nil, fmt.Errorf("unsupported site default route type: %s", validationCopy.ResolveDefaultRouteType())
+		}
+		if req.Platform != nil && !model.IsProjectedSiteModelRouteType(validationCopy.ResolveDefaultRouteType()) {
+			return nil, fmt.Errorf("unsupported site default route type: %s", validationCopy.ResolveDefaultRouteType())
+		}
+		preservedRoutes := merged.RouteBaseURLs
+		merged = validationCopy
+		merged.RouteBaseURLs = model.NormalizeSiteRouteBaseURLs(preservedRoutes)
 		if merged.ProxyMode == model.ProxyUsageModePool && merged.ProxyConfigID != nil {
 			if _, err := ProxyURLForConfig(*merged.ProxyConfigID, ctx); err != nil {
 				return nil, err
@@ -773,6 +802,9 @@ func SiteAvailableModels(siteID int, ctx context.Context) ([]string, error) {
 }
 
 func SiteModelRouteUpdate(accountID int, groupKey string, modelName string, routeType model.SiteModelRouteType, source model.SiteModelRouteSource, manualOverride bool, routeRawPayload string, ctx context.Context) error {
+	if !model.IsProjectedSiteModelRouteType(routeType) {
+		return fmt.Errorf("unsupported site model route type: %s", routeType)
+	}
 	now := time.Now()
 	updates := map[string]any{
 		"route_type":        model.NormalizeSiteModelRouteType(routeType),
@@ -788,6 +820,9 @@ func SiteModelRouteUpdate(accountID int, groupKey string, modelName string, rout
 }
 
 func SiteModelRouteUpdateIfNotManual(accountID int, groupKey string, modelName string, routeType model.SiteModelRouteType, source model.SiteModelRouteSource, routeRawPayload string, ctx context.Context) (bool, error) {
+	if !model.IsProjectedSiteModelRouteType(routeType) {
+		return false, fmt.Errorf("unsupported site model route type: %s", routeType)
+	}
 	now := time.Now()
 	updates := map[string]any{
 		"route_type":        model.NormalizeSiteModelRouteType(routeType),

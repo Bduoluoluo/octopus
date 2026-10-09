@@ -47,13 +47,11 @@ func AppendPromptSuffixJSON(body []byte, channelType outbound.OutboundType, suff
 		err      error
 	)
 	switch channelType {
-	case outbound.OutboundTypeGemini:
-		modified, err = appendGeminiPromptSuffix(payload, suffix)
 	case outbound.OutboundTypeAnthropic:
 		modified, err = appendMessagesPromptSuffix(payload, suffix, "text")
 	case outbound.OutboundTypeOpenAIResponse:
 		modified, err = appendResponsesPromptSuffix(payload, suffix)
-	case outbound.OutboundTypeOpenAIChat, outbound.OutboundTypeVolcengine:
+	case outbound.OutboundTypeOpenAIChat:
 		if _, exists := payload["messages"]; exists {
 			modified, err = appendMessagesPromptSuffix(payload, suffix, "text")
 		} else {
@@ -144,38 +142,6 @@ func appendResponsesPromptSuffix(payload map[string]json.RawMessage, suffix stri
 	return false, nil
 }
 
-func appendGeminiPromptSuffix(payload map[string]json.RawMessage, suffix string) (bool, error) {
-	rawContents, ok := payload["contents"]
-	if !ok {
-		return false, nil
-	}
-	var contents []json.RawMessage
-	if err := json.Unmarshal(rawContents, &contents); err != nil {
-		return false, fmt.Errorf("failed to decode Gemini contents for prompt suffix: %w", err)
-	}
-	for index := len(contents) - 1; index >= 0; index-- {
-		var content map[string]json.RawMessage
-		if err := json.Unmarshal(contents[index], &content); err != nil {
-			return false, fmt.Errorf("failed to decode Gemini content for prompt suffix: %w", err)
-		}
-		var role string
-		_ = json.Unmarshal(content["role"], &role)
-		if strings.TrimSpace(role) != "" && !strings.EqualFold(strings.TrimSpace(role), "user") {
-			continue
-		}
-		updated, changed, err := appendGeminiParts(content, suffix)
-		if err != nil {
-			return false, err
-		}
-		if changed {
-			contents[index] = updated
-			payload["contents"], err = json.Marshal(contents)
-			return true, err
-		}
-	}
-	return false, nil
-}
-
 func appendMessageContent(message map[string]json.RawMessage, suffix, textType string) ([]byte, bool, error) {
 	rawContent, ok := message["content"]
 	if !ok || bytes.Equal(bytes.TrimSpace(rawContent), []byte("null")) {
@@ -203,28 +169,6 @@ func appendMessageContent(message map[string]json.RawMessage, suffix, textType s
 	parts = append(parts, textPart)
 	message["content"], _ = json.Marshal(parts)
 	result, err := json.Marshal(message)
-	return result, true, err
-}
-
-func appendGeminiParts(content map[string]json.RawMessage, suffix string) ([]byte, bool, error) {
-	rawParts, ok := content["parts"]
-	if !ok || bytes.Equal(bytes.TrimSpace(rawParts), []byte("null")) {
-		return nil, false, nil
-	}
-	var parts []json.RawMessage
-	if err := json.Unmarshal(rawParts, &parts); err != nil {
-		return nil, false, fmt.Errorf("failed to decode Gemini parts for prompt suffix: %w", err)
-	}
-	if !hasPromptSuffixUserContent(parts) {
-		return nil, false, nil
-	}
-	textPart, err := json.Marshal(map[string]string{"text": suffix})
-	if err != nil {
-		return nil, false, err
-	}
-	parts = append(parts, textPart)
-	content["parts"], _ = json.Marshal(parts)
-	result, err := json.Marshal(content)
 	return result, true, err
 }
 

@@ -8,14 +8,17 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/dlclark/regexp2"
 	"github.com/xuanli27/octopus/internal/model"
 	"github.com/xuanli27/octopus/internal/transformer/outbound"
-	"github.com/dlclark/regexp2"
 )
 
 const modelFetchUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36"
 
 func FetchModels(ctx context.Context, request model.Channel) ([]string, error) {
+	if !outbound.IsSupported(request.Type) {
+		return nil, fmt.Errorf("%w: %d", model.ErrUnsupportedChannelType, request.Type)
+	}
 	client, err := ChannelHTTPClientWithContext(ctx, &request)
 	if err != nil {
 		return nil, err
@@ -25,8 +28,6 @@ func FetchModels(ctx context.Context, request model.Channel) ([]string, error) {
 	case outbound.OutboundTypeAnthropic:
 		// Issue #91: native Anthropic /models may 404 on OpenAI-compatible relays.
 		fetchModel, err = fetchAnthropicModelsOrOpenAI(client, ctx, request)
-	case outbound.OutboundTypeGemini:
-		fetchModel, err = fetchGeminiModels(client, ctx, request)
 	default:
 		fetchModel, err = fetchOpenAIModels(client, ctx, request)
 	}
@@ -156,55 +157,6 @@ func hasOpenAIVersionSuffix(lowerBase string) bool {
 		}
 	}
 	return false
-}
-
-// refer: https://ai.google.dev/api/models
-func fetchGeminiModels(client *http.Client, ctx context.Context, request model.Channel) ([]string, error) {
-	var allModels []string
-	pageToken := ""
-
-	for {
-		req, _ := http.NewRequestWithContext(
-			ctx,
-			http.MethodGet,
-			request.GetBaseUrl()+"/models",
-			nil,
-		)
-		applyDefaultModelRequestHeaders(req, request)
-		req.Header.Set("X-Goog-Api-Key", request.GetChannelKey().ChannelKey)
-		if pageToken != "" {
-			q := req.URL.Query()
-			q.Add("pageToken", pageToken)
-			req.URL.RawQuery = q.Encode()
-		}
-
-		resp, err := client.Do(req)
-		if err != nil {
-			return nil, err
-		}
-
-		var result model.GeminiModelList
-		if err := decodeModelJSONResponse(resp, &result); err != nil {
-			resp.Body.Close()
-			return nil, err
-		}
-		resp.Body.Close()
-
-		for _, m := range result.Models {
-			name := strings.TrimPrefix(m.Name, "models/")
-			allModels = append(allModels, name)
-		}
-
-		if result.NextPageToken == "" {
-			break
-		}
-		pageToken = result.NextPageToken
-	}
-	if len(allModels) == 0 {
-		// Gemini-compatible gateways often only expose OpenAI /models.
-		return fetchOpenAIModels(client, ctx, request)
-	}
-	return allModels, nil
 }
 
 // refer: https://platform.claude.com/docs

@@ -6,6 +6,10 @@ Each route group has independent auto-group settings: channel matching, projecte
 
 LLM API aggregation, protocol conversion, and load balancing.
 
+Runtime protocols: OpenAI Chat Completions, OpenAI Responses and Anthropic Messages. Responses WebSocket and `/v1/responses/compact` remain available. Historical Gemini/Volcengine/Embedding channels remain readable but cannot be created or enabled; independent Images endpoints are removed. Models from those vendors remain usable through the three supported protocols.
+
+Migration source, capability boundaries and validation: [protocol migration](docs/protocol-migration.md).
+
 [简体中文](README_zh.md)
 
 ## Requirements

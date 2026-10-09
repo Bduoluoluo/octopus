@@ -398,6 +398,8 @@ func buildSiteModelRouteDetection(
 	}
 	if metadata.RouteSupported {
 		metadata.RouteType = pickPreferredDetectedRouteType(modelName, knownRouteTypes)
+	} else if hasRetiredEndpointTypes(supportedEndpointTypes) {
+		metadata.RouteType = model.SiteModelRouteTypeUnknown
 	} else {
 		// 最后一步：站点未报告可映射的端点格式时按模型名称猜测，避免模型停留在待人工指定状态。
 		metadata.RouteType = model.InferSiteModelRouteType(modelName)
@@ -412,6 +414,9 @@ func buildSiteModelRouteDetection(
 }
 
 func inferHeuristicEndpointTypes(modelName string, supportedEndpointTypes []string) []string {
+	if hasRetiredEndpointTypes(supportedEndpointTypes) && len(normalizeSupportedRouteTypes(supportedEndpointTypes)) == 0 {
+		return nil
+	}
 	if !shouldHeuristicallyAddOpenAIResponse(modelName) {
 		return nil
 	}
@@ -476,10 +481,7 @@ func pickPreferredDetectedRouteType(modelName string, values []model.SiteModelRo
 
 	nativeRouteType := model.InferSiteModelRouteType(modelName)
 	switch nativeRouteType {
-	case model.SiteModelRouteTypeAnthropic,
-		model.SiteModelRouteTypeGemini,
-		model.SiteModelRouteTypeVolcengine,
-		model.SiteModelRouteTypeOpenAIEmbedding:
+	case model.SiteModelRouteTypeAnthropic:
 		for _, value := range values {
 			if value == nativeRouteType {
 				return value
@@ -491,9 +493,6 @@ func pickPreferredDetectedRouteType(modelName string, values []model.SiteModelRo
 		model.SiteModelRouteTypeAnthropic,
 		model.SiteModelRouteTypeOpenAIResponse,
 		model.SiteModelRouteTypeOpenAIChat,
-		model.SiteModelRouteTypeGemini,
-		model.SiteModelRouteTypeVolcengine,
-		model.SiteModelRouteTypeOpenAIEmbedding,
 	}
 	for _, preferred := range fallbackOrder {
 		for _, value := range values {
@@ -508,16 +507,10 @@ func pickPreferredDetectedRouteType(modelName string, values []model.SiteModelRo
 
 func detectedRouteTypePriority(routeType model.SiteModelRouteType) int {
 	switch routeType {
-	case model.SiteModelRouteTypeOpenAIEmbedding:
-		return 0
 	case model.SiteModelRouteTypeOpenAIResponse:
 		return 1
 	case model.SiteModelRouteTypeAnthropic:
 		return 2
-	case model.SiteModelRouteTypeGemini:
-		return 3
-	case model.SiteModelRouteTypeVolcengine:
-		return 4
 	case model.SiteModelRouteTypeOpenAIChat:
 		return 5
 	default:
@@ -531,12 +524,6 @@ func mapSupportedEndpointType(value string) (model.SiteModelRouteType, bool) {
 	case normalized == "",
 		normalized == "none":
 		return "", false
-	case normalized == "embedding",
-		normalized == "embeddings",
-		normalized == "openai_embedding",
-		normalized == "openai/embeddings",
-		strings.Contains(normalized, "/v1/embeddings"):
-		return model.SiteModelRouteTypeOpenAIEmbedding, true
 	case normalized == "responses",
 		normalized == "response",
 		normalized == "openai/responses",
@@ -547,18 +534,6 @@ func mapSupportedEndpointType(value string) (model.SiteModelRouteType, bool) {
 		normalized == "anthropic/messages",
 		strings.Contains(normalized, "/v1/messages"):
 		return model.SiteModelRouteTypeAnthropic, true
-	case normalized == "gemini",
-		normalized == "generatecontent",
-		normalized == "streamgeneratecontent",
-		normalized == "counttokens",
-		strings.Contains(normalized, ":generatecontent"),
-		strings.Contains(normalized, ":streamgeneratecontent"),
-		strings.Contains(normalized, ":counttokens"):
-		return model.SiteModelRouteTypeGemini, true
-	case normalized == "volcengine",
-		normalized == "ark",
-		strings.Contains(normalized, "volcengine"):
-		return model.SiteModelRouteTypeVolcengine, true
 	case normalized == "chat",
 		normalized == "chat_completions",
 		normalized == "chat/completions",

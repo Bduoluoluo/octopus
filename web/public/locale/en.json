@@ -840,7 +840,7 @@
     "test": {
       "title": "Model Test",
       "hint": "Send a real request using the current form without saving first. Upstream charges may apply.",
-      "unsupported": "Model testing is not supported for Embedding channels yet.",
+      "unsupported": "This channel protocol is retired or unsupported; model testing is unavailable.",
       "timeoutLabel": "Timeout:",
       "keyLabel": "Test Key",
       "modelCount": "{total} models (synced {sync} + custom {custom})",
@@ -941,6 +941,8 @@
       "modelSelected": "Selected Models",
       "modelNoSelected": "No models selected",
       "modelClearAll": "Clear All",
+      "retiredType": "{type} (retired)",
+      "retiredHint": "This protocol is no longer supported. Historical configuration is preserved; disable or delete it, or manually choose a supported protocol.",
       "typeOpenAIChat": "OpenAI Chat",
       "typeOpenAIResponse": "OpenAI Response",
       "typeOpenAIEmbedding": "OpenAI Embedding",

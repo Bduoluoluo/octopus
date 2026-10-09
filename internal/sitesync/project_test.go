@@ -67,25 +67,24 @@ func TestProjectAccountSplitsManagedChannelsByOutboundType(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ProjectAccount returned error: %v", err)
 	}
-	if len(channelIDs) != 3 {
-		t.Fatalf("expected 3 managed channels for mixed models, got %d", len(channelIDs))
+	if len(channelIDs) != 2 {
+		t.Fatalf("expected 2 managed channels for mixed models, got %d", len(channelIDs))
 	}
 
 	channelsByGroup := loadProjectedChannelsByGroupKey(t, ctx, account.ID)
-	if len(channelsByGroup) != 3 {
-		t.Fatalf("expected 3 bindings, got %d", len(channelsByGroup))
+	if len(channelsByGroup) != 2 {
+		t.Fatalf("expected 2 bindings, got %d", len(channelsByGroup))
 	}
 
 	assertProjectedChannel(t, channelsByGroup, "default", outbound.OutboundTypeOpenAIChat, "gpt-4o-mini", false)
 	assertProjectedChannel(t, channelsByGroup, "default::anthropic", outbound.OutboundTypeAnthropic, "claude-3-5-sonnet", true)
-	assertProjectedChannel(t, channelsByGroup, "default::gemini", outbound.OutboundTypeGemini, "gemini-2.0-flash", true)
 
 	secondRunIDs, err := ProjectAccount(ctx, account.ID)
 	if err != nil {
 		t.Fatalf("second ProjectAccount returned error: %v", err)
 	}
-	if len(secondRunIDs) != 3 {
-		t.Fatalf("expected 3 managed channels on second projection, got %d", len(secondRunIDs))
+	if len(secondRunIDs) != 2 {
+		t.Fatalf("expected 2 managed channels on second projection, got %d", len(secondRunIDs))
 	}
 
 	channelsAfterSecondRun := loadProjectedChannelsByGroupKey(t, ctx, account.ID)
@@ -100,7 +99,7 @@ func TestProjectAccountSplitsManagedChannelsByOutboundType(t *testing.T) {
 	}
 }
 
-func TestProjectAccountSupportsAllConfiguredRouteBuckets(t *testing.T) {
+func TestProjectAccountSkipsRetiredRouteBuckets(t *testing.T) {
 	ctx := setupProjectTestDB(t)
 	_, account := createProjectionFixture(t, ctx)
 
@@ -116,20 +115,17 @@ func TestProjectAccountSupportsAllConfiguredRouteBuckets(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ProjectAccount returned error: %v", err)
 	}
-	if len(channelIDs) != 5 {
-		t.Fatalf("expected 5 managed channels for 5 route buckets, got %d", len(channelIDs))
+	if len(channelIDs) != 2 {
+		t.Fatalf("expected 2 managed channels for 5 route buckets, got %d", len(channelIDs))
 	}
 
 	channelsByGroup := loadProjectedChannelsByGroupKey(t, ctx, account.ID)
-	if len(channelsByGroup) != 5 {
-		t.Fatalf("expected 5 bindings, got %d", len(channelsByGroup))
+	if len(channelsByGroup) != 2 {
+		t.Fatalf("expected 2 bindings, got %d", len(channelsByGroup))
 	}
 
 	assertProjectedChannel(t, channelsByGroup, "default", outbound.OutboundTypeOpenAIChat, "gpt-4o-mini", false)
 	assertProjectedChannel(t, channelsByGroup, "default::anthropic", outbound.OutboundTypeAnthropic, "claude-3-5-sonnet", true)
-	assertProjectedChannel(t, channelsByGroup, "default::gemini", outbound.OutboundTypeGemini, "gemini-2.0-flash", true)
-	assertProjectedChannel(t, channelsByGroup, "default::volcengine", outbound.OutboundTypeVolcengine, "doubao-seed-1-6", true)
-	assertProjectedChannel(t, channelsByGroup, "default::openai-embedding", outbound.OutboundTypeOpenAIEmbedding, "text-embedding-3-large", true)
 }
 
 func TestProjectAccountRewritesGroupItemsBeforeRemovingStaleManagedBindings(t *testing.T) {

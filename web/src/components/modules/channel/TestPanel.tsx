@@ -6,7 +6,7 @@ import {
     type Channel,
     type CreateChannelRequest,
     type TestModelResult,
-    ChannelType,
+    isSupportedChannelType,
 } from '@/api/endpoints/channel';
 import type { ChannelFormData } from './Form';
 import { Badge } from '@/components/ui/badge';
@@ -63,7 +63,7 @@ export function TestPanel({ channel, formData }: TestPanelProps) {
     }, [channelKeys, formKeys]);
 
     const channelType = channel?.type ?? formData?.type;
-    const isEmbedding = channelType === ChannelType.OpenAIEmbedding;
+    const isUnsupported = channelType === undefined || !isSupportedChannelType(channelType);
 
     const effectiveKeyIndex = Math.min(Math.max(0, keyIndex), Math.max(0, keys.length - 1));
     const hasValidKey = Boolean(keys[effectiveKeyIndex]?.channel_key.trim());
@@ -243,12 +243,12 @@ export function TestPanel({ channel, formData }: TestPanelProps) {
                         value={timeoutSec}
                         onChange={(e) => setTimeoutSec(Math.max(1, Math.min(300, Number(e.target.value) || 10)))}
                         className="w-12 px-1 py-0.5 text-xs bg-background border border-border rounded-md text-right"
-                        disabled={isEmbedding || isBusy}
+                        disabled={isUnsupported || isBusy}
                     />
                     <span>s</span>
                 </label>
             </header>
-            <p className="text-xs text-muted-foreground">{t(isEmbedding ? 'unsupported' : 'hint')}</p>
+            <p className="text-xs text-muted-foreground">{t(isUnsupported ? 'unsupported' : 'hint')}</p>
 
             <div className="text-xs text-muted-foreground">
                 {t('modelCount', { total: modelInfo.all.length, sync: modelInfo.syncCount, custom: modelInfo.customCount })}
@@ -260,7 +260,7 @@ export function TestPanel({ channel, formData }: TestPanelProps) {
                     <select
                         value={effectiveKeyIndex}
                         onChange={(e) => setKeyIndex(Number(e.target.value))}
-                        disabled={isEmbedding || isBusy || keys.length === 0}
+                        disabled={isUnsupported || isBusy || keys.length === 0}
                         aria-label={t('keyLabel')}
                         className="w-full appearance-none bg-background border border-border rounded-md px-2 py-1 text-xs font-mono pr-6 truncate"
                     >
@@ -292,7 +292,7 @@ export function TestPanel({ channel, formData }: TestPanelProps) {
                                     type="checkbox"
                                     checked={checked}
                                     onChange={() => toggleSelect(m)}
-                                    disabled={isEmbedding || isBusy}
+                                    disabled={isUnsupported || isBusy}
                                     aria-label={m}
                                     className="size-3.5 accent-primary cursor-pointer shrink-0"
                                 />
@@ -305,7 +305,7 @@ export function TestPanel({ channel, formData }: TestPanelProps) {
                                 <button
                                     type="button"
                                     onClick={() => runOne(m)}
-                                    disabled={isEmbedding || !hasValidKey || !hasBaseURL || isBusy}
+                                    disabled={isUnsupported || !hasValidKey || !hasBaseURL || isBusy}
                                     className="p-1 rounded-md hover:bg-accent disabled:opacity-40 disabled:cursor-not-allowed shrink-0 transition-colors"
                                     title={t('testButtonTitle')}
                                 >
@@ -328,7 +328,7 @@ export function TestPanel({ channel, formData }: TestPanelProps) {
                     <button
                         type="button"
                         onClick={toggleSelectAll}
-                        disabled={isEmbedding || isBusy || modelInfo.all.length === 0}
+                        disabled={isUnsupported || isBusy || modelInfo.all.length === 0}
                         className="px-2 py-1 rounded-md border border-border bg-background hover:bg-accent disabled:opacity-40 transition-colors"
                     >
                         {selected.size === modelInfo.all.length ? t('deselectAll') : t('selectAll')}
@@ -336,7 +336,7 @@ export function TestPanel({ channel, formData }: TestPanelProps) {
                     <button
                         type="button"
                         onClick={runBatch}
-                        disabled={isEmbedding || !hasValidKey || !hasBaseURL || isBusy || selectedModels.length === 0}
+                        disabled={isUnsupported || !hasValidKey || !hasBaseURL || isBusy || selectedModels.length === 0}
                         className="px-2 py-1 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40 transition-colors"
                     >
                         {isBatch ? t('testing') : t('batchTest')}
