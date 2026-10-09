@@ -222,8 +222,9 @@ func (ra *relayAttempt) clientRequestHeaders() http.Header {
 	return ra.c.Request.Header
 }
 
-func (ra *relayAttempt) handleWSStreamResponseV2(ctx context.Context, reader *wsUpstreamReader) error {
+func (ra *relayAttempt) handleWSStreamResponseV2(ctx context.Context, reader *wsUpstreamReader) (resultErr error) {
 	defer ra.closeFirstTokenBudget()
+	defer ra.closeProtocolStream(&resultErr)
 
 	// Hand off early heartbeat
 	ra.heartbeat.Hand()
@@ -247,6 +248,7 @@ func (ra *relayAttempt) handleWSStreamResponseV2(ctx context.Context, reader *ws
 		Context:           ctx,
 		FirstTokenTimeout: firstTokenTimeout,
 		HeartbeatInterval: streamHeartbeatInterval(),
+		OnEnd:             ra.endProtocolStream,
 		OnFirstToken: func() {
 			ra.metrics.SetFirstTokenTime(time.Now())
 			ra.stopFirstTokenTimer()

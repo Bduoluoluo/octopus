@@ -14,11 +14,13 @@ import (
 	"github.com/tmaxmax/go-sse"
 	"github.com/xuanli27/octopus/internal/relay/stream"
 	"github.com/xuanli27/octopus/internal/transformer/model"
+	"github.com/xuanli27/octopus/internal/transformer/outbound"
 	"github.com/xuanli27/octopus/internal/utils/log"
 )
 
-func (ra *relayAttempt) handleStreamResponseV2(ctx context.Context, response *http.Response) error {
+func (ra *relayAttempt) handleStreamResponseV2(ctx context.Context, response *http.Response) (resultErr error) {
 	defer ra.closeFirstTokenBudget()
+	defer ra.closeProtocolStream(&resultErr)
 
 	// Content-Type validation
 	if ct := response.Header.Get("Content-Type"); ct != "" && !strings.Contains(strings.ToLower(ct), "text/event-stream") {
@@ -30,20 +32,7 @@ func (ra *relayAttempt) handleStreamResponseV2(ctx context.Context, response *ht
 	ra.heartbeat.Hand()
 
 	// Build transform function
-	transform := func(ctx context.Context, data []byte) ([]byte, error) {
-		var output bytes.Buffer
-		for event, err := range sse.Read(bytes.NewReader(data), &sse.ReadConfig{MaxEventSize: maxSSEEventSize}) {
-			if err != nil {
-				return nil, err
-			}
-			converted, err := ra.transformStreamData(ctx, event.Data)
-			if err != nil {
-				return nil, err
-			}
-			output.Write(converted)
-		}
-		return output.Bytes(), nil
-	}
+	transform := ra.transformStreamSSE
 
 	// Determine first token timeout
 	var firstTokenTimeout time.Duration
@@ -59,6 +48,7 @@ func (ra *relayAttempt) handleStreamResponseV2(ctx context.Context, response *ht
 		Context:           ctx,
 		FirstTokenTimeout: firstTokenTimeout,
 		HeartbeatInterval: streamHeartbeatInterval(),
+		OnEnd:             ra.endProtocolStream,
 		OnFirstToken: func() {
 			ra.metrics.SetFirstTokenTime(time.Now())
 			ra.stopFirstTokenTimer()
@@ -91,8 +81,9 @@ func (ra *relayAttempt) handleStreamResponseV2(ctx context.Context, response *ht
 
 // handleStreamResponsePassthroughV2 uses StreamProcessor for unified passthrough handling.
 // Works with any PassthroughCapable transformer (Anthropic, OpenAI Responses, etc.).
-func (ra *relayAttempt) handleStreamResponsePassthroughV2(ctx context.Context, response *http.Response, cfg model.PassthroughConfig) error {
+func (ra *relayAttempt) handleStreamResponsePassthroughV2(ctx context.Context, response *http.Response, cfg model.PassthroughConfig) (resultErr error) {
 	defer ra.closeFirstTokenBudget()
+	defer ra.closeProtocolStream(&resultErr)
 
 	// Content-Type validation
 	if ct := response.Header.Get("Content-Type"); ct != "" && !strings.Contains(strings.ToLower(ct), "text/event-stream") {
@@ -109,13 +100,13 @@ func (ra *relayAttempt) handleStreamResponsePassthroughV2(ctx context.Context, r
 		firstTokenTimeout = time.Duration(ra.firstTokenTimeOutSec) * time.Second
 	}
 
-	// Buffer for raw stream (for metrics collection)
-	var rawStreamBuf bytes.Buffer
-
 	// Create StreamProcessor
 	processor := stream.NewStreamProcessor(stream.StreamConfig{
 		Source: withCacheRatio(stream.NewFramedSSESource(response.Body, maxSSEEventSize), ra.channel, true),
 		Transform: guardedStreamTransform(func(ctx context.Context, data []byte) ([]byte, error) {
+			if _, err := ra.transformStreamSSE(ctx, data); err != nil {
+				return nil, err
+			}
 			return mapResponseModelSSE(data, ra.requestModel, ra.observeResponseModelName), nil
 		}, true),
 		Writer:            ra.getStreamWriter(),
@@ -124,6 +115,10 @@ func (ra *relayAttempt) handleStreamResponsePassthroughV2(ctx context.Context, r
 		HeartbeatInterval: streamHeartbeatInterval(),
 		BufferRawStream:   true,
 		TerminalEvents:    cfg.TerminalEvents,
+		OnEnd: func(ctx context.Context) ([]byte, error) {
+			_, err := ra.endProtocolStream(ctx)
+			return nil, err
+		},
 		OnFirstToken: func() {
 			ra.metrics.SetFirstTokenTime(time.Now())
 			ra.stopFirstTokenTimer()
@@ -132,12 +127,6 @@ func (ra *relayAttempt) handleStreamResponsePassthroughV2(ctx context.Context, r
 			if len(rawStream) == 0 {
 				return stream.ErrEmptyUpstreamStream
 			}
-			// Copy to buffer for metrics collection
-			rawStreamBuf.Write(rawStream)
-
-			// Collect passthrough metrics
-			ra.collectPassthroughMetrics(ctx, rawStream)
-
 			// Collect response if configured
 			if cfg.CollectMetrics {
 				ra.collectResponse()
@@ -169,60 +158,39 @@ func (ra *relayAttempt) handleStreamResponsePassthroughV2(ctx context.Context, r
 		}
 	}
 
-	// On disconnect with partial data, still try to collect metrics
-	if err != nil && errors.Is(err, context.Canceled) && rawStreamBuf.Len() > 0 {
-		ra.collectPassthroughMetrics(context.Background(), rawStreamBuf.Bytes())
-		if cfg.CollectMetrics {
-			ra.collectResponse()
-		}
-	}
-
 	return err
 }
 
-// collectPassthroughMetrics parses raw SSE stream for metrics aggregation without mutating response.
-func (ra *relayAttempt) collectPassthroughMetrics(ctx context.Context, rawStream []byte) {
-	if len(rawStream) == 0 {
-		return
-	}
-
-	// Try stream event adapter first (preferred)
-	outEventAdapter, outOk := ra.outAdapter.(model.OutboundStreamEventTransformer)
-	inEventAdapter, inOk := ra.inAdapter.(model.InboundStreamEventTransformer)
-	if outOk && inOk {
-		readCfg := &sse.ReadConfig{MaxEventSize: maxSSEEventSize}
-		for ev, err := range sse.Read(bytes.NewReader(rawStream), readCfg) {
-			if err != nil {
-				log.Debugf("passthrough metrics parse skipped: %v", err)
-				return
-			}
-			if events, terr := outEventAdapter.TransformStreamEvent(ctx, []byte(ev.Data)); terr == nil && len(events) > 0 {
-				_, _ = inEventAdapter.TransformStreamEvents(ctx, events)
-			}
-		}
-		return
-	}
-
-	// Fallback to traditional stream transformer
-	readCfg := &sse.ReadConfig{MaxEventSize: maxSSEEventSize}
-	for ev, err := range sse.Read(bytes.NewReader(rawStream), readCfg) {
+func (ra *relayAttempt) transformStreamSSE(ctx context.Context, data []byte) ([]byte, error) {
+	var output bytes.Buffer
+	for event, err := range sse.Read(bytes.NewReader(data), &sse.ReadConfig{MaxEventSize: maxSSEEventSize}) {
 		if err != nil {
-			log.Debugf("passthrough metrics parse skipped: %v", err)
-			return
+			return nil, err
 		}
-		if chunk, terr := ra.outAdapter.TransformStream(ctx, []byte(ev.Data)); terr == nil && chunk != nil {
-			_, _ = ra.inAdapter.TransformStream(ctx, chunk)
+		converted, err := ra.transformStreamFrame(ctx, model.StreamFrame{
+			Event: event.Type,
+			Data:  []byte(event.Data),
+			ID:    event.LastEventID,
+		})
+		if err != nil {
+			return nil, err
 		}
+		output.Write(converted)
 	}
+	return output.Bytes(), nil
 }
 
 // transformStreamData 转换流式数据
 func (ra *relayAttempt) transformStreamData(ctx context.Context, data string) ([]byte, error) {
-	ra.observeResponseModel([]byte(data))
-	if err := upstreamPayloadError([]byte(data), ""); err != nil {
+	return ra.transformStreamFrame(ctx, model.StreamFrame{Data: []byte(data)})
+}
+
+func (ra *relayAttempt) transformStreamFrame(ctx context.Context, frame model.StreamFrame) ([]byte, error) {
+	ra.observeResponseModel(frame.Data)
+	if err := upstreamPayloadError(frame.Data, frame.Event); err != nil {
 		return nil, err
 	}
-	events, ok, err := ra.decodeOutboundStreamEvents(ctx, []byte(data))
+	events, ok, err := ra.decodeOutboundStreamFrame(ctx, frame)
 	if err != nil {
 		log.Warnf("failed to transform stream events: %v", err)
 		return nil, err
@@ -231,7 +199,7 @@ func (ra *relayAttempt) transformStreamData(ctx context.Context, data string) ([
 		return ra.encodeInboundStreamEvents(ctx, events)
 	}
 
-	internalStream, err := ra.decodeOutboundStreamResponse(ctx, []byte(data))
+	internalStream, err := ra.decodeOutboundStreamResponse(ctx, frame.Data)
 	if err != nil {
 		log.Warnf("failed to transform stream: %v", err)
 		return nil, err
@@ -244,18 +212,59 @@ func (ra *relayAttempt) transformStreamData(ctx context.Context, data string) ([
 }
 
 func (ra *relayAttempt) decodeOutboundStreamEvents(ctx context.Context, data []byte) ([]model.StreamEvent, bool, error) {
+	return ra.decodeOutboundStreamFrame(ctx, model.StreamFrame{Data: data})
+}
+
+func (ra *relayAttempt) decodeOutboundStreamFrame(ctx context.Context, frame model.StreamFrame) ([]model.StreamEvent, bool, error) {
+	if _, ok := ra.inAdapter.(model.InboundStreamEventTransformer); !ok {
+		return nil, false, nil
+	}
+	if adapter, ok := ra.outAdapter.(model.OutboundStreamFrameTransformer); ok {
+		events, err := adapter.TransformStreamFrame(ctx, frame)
+		return events, true, err
+	}
 	outEventAdapter, ok := ra.outAdapter.(model.OutboundStreamEventTransformer)
 	if !ok {
 		return nil, false, nil
 	}
-	if _, ok := ra.inAdapter.(model.InboundStreamEventTransformer); !ok {
-		return nil, false, nil
-	}
-	events, err := outEventAdapter.TransformStreamEvent(ctx, data)
+	events, err := outEventAdapter.TransformStreamEvent(ctx, frame.Data)
 	if err != nil {
 		return nil, true, err
 	}
 	return events, true, nil
+}
+
+func (ra *relayAttempt) endProtocolStream(ctx context.Context) ([]byte, error) {
+	adapter, ok := ra.outAdapter.(model.OutboundStreamFrameTransformer)
+	if !ok {
+		return nil, nil
+	}
+	ctx = context.WithoutCancel(ctx)
+	events, err := adapter.EndStream(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return ra.encodeInboundStreamEvents(ctx, events)
+}
+
+func (ra *relayAttempt) closeProtocolStream(resultErr *error) {
+	adapter, framed := ra.outAdapter.(model.OutboundStreamFrameTransformer)
+	if framed {
+		if err := adapter.CloseStream(); err != nil {
+			*resultErr = errors.Join(*resultErr, err)
+		}
+	}
+	if *resultErr != nil && !ra.streamPayloadWritten.Load() {
+		if resetter, ok := ra.inAdapter.(model.InboundStreamResetter); ok {
+			resetter.ResetStream()
+		}
+		ra.responseCollected.Store(false)
+		if framed && ra.channel != nil {
+			if fresh := outbound.Get(ra.channel.Type); fresh != nil {
+				ra.outAdapter = fresh
+			}
+		}
+	}
 }
 
 func (ra *relayAttempt) encodeInboundStreamEvents(ctx context.Context, events []model.StreamEvent) ([]byte, error) {
@@ -385,37 +394,6 @@ func (ra *relayAttempt) collectResponse() {
 	ra.metrics.SetInternalResponse(internalResponse, actualModel)
 }
 
-func (ra *relayAttempt) collectOpenAIResponsesPassthroughMetrics(ctx context.Context, rawStream []byte) {
-	if len(rawStream) == 0 {
-		return
-	}
-	outEventAdapter, outOk := ra.outAdapter.(model.OutboundStreamEventTransformer)
-	inEventAdapter, inOk := ra.inAdapter.(model.InboundStreamEventTransformer)
-	if outOk && inOk {
-		readCfg := &sse.ReadConfig{MaxEventSize: maxSSEEventSize}
-		for ev, err := range sse.Read(bytes.NewReader(rawStream), readCfg) {
-			if err != nil {
-				log.Debugf("openai responses passthrough metrics parse skipped: %v", err)
-				return
-			}
-			if events, terr := outEventAdapter.TransformStreamEvent(ctx, []byte(ev.Data)); terr == nil && len(events) > 0 {
-				_, _ = inEventAdapter.TransformStreamEvents(ctx, events)
-			}
-		}
-		return
-	}
-	readCfg := &sse.ReadConfig{MaxEventSize: maxSSEEventSize}
-	for ev, err := range sse.Read(bytes.NewReader(rawStream), readCfg) {
-		if err != nil {
-			log.Debugf("openai responses passthrough metrics parse skipped: %v", err)
-			return
-		}
-		if internalStream, terr := ra.outAdapter.TransformStream(ctx, []byte(ev.Data)); terr == nil && internalStream != nil {
-			_, _ = ra.inAdapter.TransformStream(ctx, internalStream)
-		}
-	}
-}
-
 // responsesPassthroughTerminalEvents / anthropicPassthroughTerminalEvents 定义各协议
 // SSE 流的终态事件类型；缓存流中出现终态事件即视为上游响应已完整送达。
 var (
@@ -457,38 +435,4 @@ func streamReachedTerminalEvent(rawStream []byte, terminalTypes map[string]struc
 		}
 	}
 	return false
-}
-
-// forwardViaHTTPStandard 是 forwardViaHTTP 的原路径（直通判定失败时的兜底）。
-// 留作显式出口，避免 passthrough 失败时的递归。
-
-func (ra *relayAttempt) collectAnthropicPassthroughMetrics(ctx context.Context, rawStream []byte) {
-	if len(rawStream) == 0 {
-		return
-	}
-	outEventAdapter, outOk := ra.outAdapter.(model.OutboundStreamEventTransformer)
-	inEventAdapter, inOk := ra.inAdapter.(model.InboundStreamEventTransformer)
-	if outOk && inOk {
-		readCfg := &sse.ReadConfig{MaxEventSize: maxSSEEventSize}
-		for ev, err := range sse.Read(bytes.NewReader(rawStream), readCfg) {
-			if err != nil {
-				log.Debugf("anthropic passthrough metrics parse skipped: %v", err)
-				return
-			}
-			if events, terr := outEventAdapter.TransformStreamEvent(ctx, []byte(ev.Data)); terr == nil && len(events) > 0 {
-				_, _ = inEventAdapter.TransformStreamEvents(ctx, events)
-			}
-		}
-		return
-	}
-	readCfg := &sse.ReadConfig{MaxEventSize: maxSSEEventSize}
-	for ev, err := range sse.Read(bytes.NewReader(rawStream), readCfg) {
-		if err != nil {
-			log.Debugf("anthropic passthrough metrics parse skipped: %v", err)
-			return
-		}
-		if internalStream, terr := ra.outAdapter.TransformStream(ctx, []byte(ev.Data)); terr == nil && internalStream != nil {
-			_, _ = ra.inAdapter.TransformStream(ctx, internalStream)
-		}
-	}
 }

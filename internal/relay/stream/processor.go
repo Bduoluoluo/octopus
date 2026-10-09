@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tmaxmax/go-sse"
 	"github.com/xuanli27/octopus/internal/utils/log"
 	"github.com/xuanli27/octopus/internal/utils/safe"
-	"github.com/tmaxmax/go-sse"
 )
 
 // ErrEmptyUpstreamStream marks 200 SSE streams that ended without forwarding
@@ -59,6 +59,7 @@ type StreamConfig struct {
 	// Callbacks
 	OnFirstToken func()                                            // Called when first payload written
 	OnFinish     func(ctx context.Context, rawStream []byte) error // Called on stream end
+	OnEnd        func(ctx context.Context) ([]byte, error)
 
 	// Passthrough-specific
 	BufferRawStream bool                // Enable raw stream buffering for metrics
@@ -155,12 +156,18 @@ func (p *StreamProcessor) Run() error {
 
 		case r, ok := <-results:
 			if !ok {
+				if p.config.Context.Err() != nil {
+					return p.handleDisconnect()
+				}
 				// Channel closed, stream ended
 				return p.finalize()
 			}
 
 			if r.err != nil {
 				if r.err == io.EOF {
+					if p.config.Context.Err() != nil {
+						return p.handleDisconnect()
+					}
 					return p.finalize()
 				}
 				return fmt.Errorf("stream read error: %w", r.err)
@@ -268,8 +275,22 @@ func (p *StreamProcessor) handleFirstTokenTimeout() error {
 
 // finalize completes the stream and calls OnFinish callback.
 func (p *StreamProcessor) finalize() error {
+	var finalOutput []byte
+	var endErr error
+	if p.config.OnEnd != nil {
+		finalOutput, endErr = p.config.OnEnd(p.config.Context)
+	}
 	if !p.payloadWritten {
-		return ErrEmptyUpstreamStream
+		return errors.Join(ErrEmptyUpstreamStream, endErr)
+	}
+	if endErr != nil {
+		return endErr
+	}
+	if len(finalOutput) > 0 {
+		if _, err := p.config.Writer.Write(finalOutput); err != nil {
+			return fmt.Errorf("write error: %w", err)
+		}
+		p.config.Writer.Flush()
 	}
 
 	log.Debugf("stream end (payload_written=%t)", p.payloadWritten)

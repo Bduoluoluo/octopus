@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -194,7 +195,8 @@ func (ra *relayAttempt) buildWSPassthroughRequestPayload() ([]byte, error) {
 	return payloadBytes, nil
 }
 
-func (ra *relayAttempt) handleWSPassthroughStream(ctx context.Context, pc *pooledConn) (*wsPassthroughStats, error) {
+func (ra *relayAttempt) handleWSPassthroughStream(ctx context.Context, pc *pooledConn) (result *wsPassthroughStats, resultErr error) {
+	defer ra.closeProtocolStream(&resultErr)
 	writer := ra.getStreamWriter()
 	stats := &wsPassthroughStats{}
 	cacheRatio := newCacheRatioOverride(ra.channel)
@@ -206,10 +208,11 @@ func (ra *relayAttempt) handleWSPassthroughStream(ctx context.Context, pc *poole
 		if err != nil {
 			closeStatus := websocket.CloseStatus(err)
 			if closeStatus == websocket.StatusNormalClosure || closeStatus == websocket.StatusGoingAway {
+				_, endErr := ra.endProtocolStream(readCtx)
 				if firstEvent {
-					return stats, fmt.Errorf("ws stream ended before first event")
+					return stats, errors.Join(fmt.Errorf("ws stream ended before first event"), endErr)
 				}
-				return stats, nil
+				return stats, endErr
 			}
 			return stats, fmt.Errorf("ws passthrough read error: %w", err)
 		}
@@ -229,6 +232,9 @@ func (ra *relayAttempt) handleWSPassthroughStream(ctx context.Context, pc *poole
 				}
 			}
 			return stats, stats.Error
+		}
+		if _, err := ra.transformStreamData(readCtx, string(data)); err != nil {
+			return stats, err
 		}
 		if !dropDownstream {
 			out := ra.rewriteWSPassthroughDownstreamModel(data)
@@ -250,7 +256,8 @@ func (ra *relayAttempt) handleWSPassthroughStream(ctx context.Context, pc *poole
 		}
 		firstEvent = false
 		if isWSPassthroughTerminal(data) {
-			return stats, nil
+			_, endErr := ra.endProtocolStream(readCtx)
+			return stats, endErr
 		}
 	}
 }
