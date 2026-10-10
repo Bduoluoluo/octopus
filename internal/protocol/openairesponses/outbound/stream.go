@@ -29,7 +29,6 @@ type responseItemState struct {
 	started   bool
 	stopped   bool
 	arguments string
-	signature string
 	text      map[string]string
 	citations map[string]bool
 }
@@ -286,6 +285,21 @@ func (outbound *ResponseOutbound) TransformStreamFrame(ctx context.Context, fram
 					return nil, err
 				}
 			}
+		}
+		var reasoningIndices []int
+		for position, output := range outbound.outputItems {
+			if output.Type == "reasoning" && output.EncryptedContent != nil && *output.EncryptedContent != "" {
+				reasoningIndices = append(reasoningIndices, position)
+			}
+		}
+		sort.Ints(reasoningIndices)
+		for _, position := range reasoningIndices {
+			output := outbound.outputItems[position]
+			signature := emit(model.StreamEventKindSignatureDelta)
+			signature.OutputIndex = &position
+			signature.ContentIndex = nil
+			signature.ItemID = output.ID
+			signature.Delta = &model.StreamDelta{Signature: *output.EncryptedContent}
 		}
 		state.terminal = true
 		status := strings.TrimPrefix(event.Type, "response.")
@@ -587,16 +601,6 @@ func (outbound *ResponseOutbound) consumeItem(index int, value wire.Item, done b
 			if err := outbound.consumeText(index, &summaryIndex, "reasoning", summary.Text, true, base, events); err != nil {
 				return err
 			}
-		}
-		if done && value.EncryptedContent != nil && *value.EncryptedContent != "" && state.signature != *value.EncryptedContent {
-			if state.signature != "" {
-				return fmt.Errorf("reasoning signature changed after item completion")
-			}
-			state.signature = *value.EncryptedContent
-			event := base
-			event.Kind = model.StreamEventKindSignatureDelta
-			event.Delta = &model.StreamDelta{Signature: state.signature}
-			*events = append(*events, event)
 		}
 	}
 	state.item = value

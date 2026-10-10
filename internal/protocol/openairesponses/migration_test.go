@@ -244,9 +244,23 @@ func TestPinnedNamespaceHistoryAndCollision(t *testing.T) {
 	if result.Output[0].Name != "ns__lookup" || result.Output[0].Namespace != "ns" {
 		t.Fatalf("wrong native identity: %s", encoded)
 	}
-	_, err = decoder.TransformRequest(context.Background(), []byte(`{"model":"m","input":"hi","tools":[{"type":"function","name":"ns__lookup"},{"type":"namespace","name":"ns","tools":[{"type":"function","name":"lookup"}]}]}`))
-	if err == nil {
-		t.Fatal("namespace collision accepted")
+	request, err = decoder.TransformRequest(context.Background(), []byte(`{"model":"m","input":"hi","tools":[{"type":"function","name":"ns__lookup"},{"type":"namespace","name":"ns","tools":[{"type":"function","name":"lookup"}]}]}`))
+	if err != nil {
+		t.Fatalf("namespace collision must be forwarded to upstream: %v", err)
+	}
+	if !request.HasOpenAIResponsesPassthrough() {
+		t.Fatal("namespace collision must preserve original tool identities")
+	}
+	response.Choices[0].Message.ToolCalls[0].Function.Name = "ns__lookup"
+	encoded, err = decoder.TransformResponse(context.Background(), response)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(encoded, &result); err != nil {
+		t.Fatal(err)
+	}
+	if result.Output[0].Name != "ns__lookup" || result.Output[0].Namespace != "" {
+		t.Fatalf("ambiguous tool identity must not be guessed: %s", encoded)
 	}
 }
 

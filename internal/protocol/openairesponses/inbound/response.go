@@ -1169,8 +1169,8 @@ func firstUnsupportedResponsesToolType(tools []ResponsesTool) string {
 		case "function", "image_generation":
 			continue
 		case "namespace":
-			if unsupported := firstUnsupportedResponsesToolType(tool.Tools); unsupported != "" {
-				return unsupported
+			if !canFlattenNamespace(tool) {
+				return "namespace"
 			}
 		case "":
 			return "<empty>"
@@ -1509,22 +1509,22 @@ func convertToolsToInternal(tools []ResponsesTool) ([]model.Tool, error) {
 				},
 			})
 		case "namespace":
-			if tool.Name == "" {
-				return nil, fmt.Errorf("namespace name is empty")
-			}
-			nested, err := convertToolsToInternal(tool.Tools)
-			if err != nil {
-				return nil, err
-			}
-			for index := range nested {
-				if nested[index].Type != "function" {
-					return nil, fmt.Errorf("namespace %q contains non-function tool %q", tool.Name, nested[index].Type)
+			if canFlattenNamespace(tool) {
+				nested, err := convertToolsToInternal(tool.Tools)
+				if err != nil {
+					return nil, err
 				}
-				nested[index].Function.Name = flatFunctionName(tool.Name, nested[index].Function.Name)
-				nested[index].Function.ProviderExtensions = &model.ProviderExtensions{OpenAIResponses: &model.ProtocolExtension{Fields: model.ProtocolFields{}}}
-				nested[index].Function.ProviderExtensions.OpenAIResponses.Fields["namespace"], _ = json.Marshal(tool.Name)
+				for index := range nested {
+					nested[index].Function.Name = flatFunctionName(tool.Name, nested[index].Function.Name)
+					if nested[index].Function.ProviderExtensions.OpenAIResponses.Fields == nil {
+						nested[index].Function.ProviderExtensions.OpenAIResponses.Fields = model.ProtocolFields{}
+					}
+					nested[index].Function.ProviderExtensions.OpenAIResponses.Fields["namespace"], _ = json.Marshal(tool.Name)
+				}
+				result = append(result, nested...)
+				continue
 			}
-			result = append(result, nested...)
+			fallthrough
 		default:
 			raw, err := json.Marshal(tool)
 			if err != nil {
@@ -1535,6 +1535,18 @@ func convertToolsToInternal(tools []ResponsesTool) ([]model.Tool, error) {
 	}
 
 	return result, nil
+}
+
+func canFlattenNamespace(tool ResponsesTool) bool {
+	if tool.Name == "" {
+		return false
+	}
+	for _, nested := range tool.Tools {
+		if nested.Type != "function" {
+			return false
+		}
+	}
+	return true
 }
 
 func convertToResponsesAPIResponse(resp *model.InternalLLMResponse) *ResponsesResponse {

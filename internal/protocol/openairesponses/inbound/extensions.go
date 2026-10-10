@@ -230,21 +230,21 @@ func (inbound *ResponseInbound) captureNamespaces(request *model.InternalLLMRequ
 			continue
 		}
 		if declared[tool.Function.Name] {
-			return fmt.Errorf("duplicate function tool name %q", tool.Function.Name)
+			request.MarkOpenAIResponsesPassthroughRequired("tool:duplicate_function_name")
+			inbound.namespaces = nil
+			return nil
 		}
 		declared[tool.Function.Name] = true
+		var namespace string
 		if tool.Function.ProviderExtensions != nil && tool.Function.ProviderExtensions.OpenAIResponses != nil {
 			raw := tool.Function.ProviderExtensions.OpenAIResponses.Fields["namespace"]
-			var namespace string
 			if len(raw) > 0 {
 				if err := json.Unmarshal(raw, &namespace); err != nil {
 					return err
 				}
 			}
-			if namespace != "" {
-				inbound.namespaces[tool.Function.Name] = namespace
-			}
 		}
+		inbound.namespaces[tool.Function.Name] = namespace
 	}
 	for _, message := range request.Messages {
 		for _, call := range message.ToolCalls {
@@ -258,12 +258,12 @@ func (inbound *ResponseInbound) captureNamespaces(request *model.InternalLLMRequ
 					return err
 				}
 			}
-			if namespace != "" {
-				if previous, exists := inbound.namespaces[call.Function.Name]; exists && previous != namespace {
-					return fmt.Errorf("ambiguous namespace for %q", call.Function.Name)
-				}
-				inbound.namespaces[call.Function.Name] = namespace
+			if previous, exists := inbound.namespaces[call.Function.Name]; exists && previous != namespace {
+				request.MarkOpenAIResponsesPassthroughRequired("tool:ambiguous_namespace")
+				inbound.namespaces = nil
+				return nil
 			}
+			inbound.namespaces[call.Function.Name] = namespace
 		}
 	}
 	return nil
