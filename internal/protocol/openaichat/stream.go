@@ -27,13 +27,10 @@ func (decoder *StreamDecoder) Push(ctx context.Context, frame model.StreamFrame)
 	if streamError := parseStreamError(frame); streamError != nil {
 		return nil, streamError
 	}
-	if decoder.done {
-		if len(data) == 0 || bytes.Equal(data, []byte("[DONE]")) {
+	if bytes.Equal(data, []byte("[DONE]")) {
+		if decoder.done {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("Chat event after terminal marker")
-	}
-	if bytes.Equal(data, []byte("[DONE]")) {
 		decoder.done = true
 		return []model.StreamEvent{{Kind: model.StreamEventKindDone}}, nil
 	}
@@ -53,13 +50,47 @@ func (decoder *StreamDecoder) Push(ctx context.Context, frame model.StreamFrame)
 			choice.FinishReason = nil
 		}
 		finished := choice.FinishReason != nil
-		if decoder.choices[choice.Index] && choice.Delta != nil && (choice.Delta.Content.Content != nil || len(choice.Delta.ToolCalls) > 0) {
-			return nil, fmt.Errorf("Chat choice %d received data after finish", choice.Index)
-		}
 		decoder.choices[choice.Index] = decoder.choices[choice.Index] || finished
+		if choice.Delta != nil {
+			for partIndex := range choice.Delta.Content.MultipleContent {
+				part := &choice.Delta.Content.MultipleContent[partIndex]
+				if len(part.Citations) > 0 {
+					raw, err := json.Marshal(part.Citations)
+					if err != nil {
+						return nil, err
+					}
+					if part.ProviderExtensions == nil {
+						part.ProviderExtensions = &model.ProviderExtensions{}
+					}
+					if part.ProviderExtensions.OpenAIChat == nil {
+						part.ProviderExtensions.OpenAIChat = &model.ProtocolExtension{Fields: model.ProtocolFields{}}
+					}
+					part.ProviderExtensions.OpenAIChat.Fields["citations"] = raw
+					part.Citations = nil
+				}
+			}
+		}
 	}
 	events := model.StreamEventsFromInternalResponse(response)
 	for index := range events {
+		if events[index].Message != nil {
+			for partIndex := range events[index].Message.Content.MultipleContent {
+				part := &events[index].Message.Content.MultipleContent[partIndex]
+				if raw := chatFields(part.ProviderExtensions)["citations"]; len(raw) > 0 && len(part.Citations) == 0 {
+					if err := json.Unmarshal(raw, &part.Citations); err != nil {
+						return nil, err
+					}
+				}
+			}
+		}
+		if events[index].Kind == model.StreamEventKindMessageStop {
+			for _, choice := range response.Choices {
+				if choice.Index == events[index].Index && choice.FinishReason != nil {
+					events[index].StopReason = model.FinishReason(*choice.FinishReason)
+					break
+				}
+			}
+		}
 		if events[index].Kind == model.StreamEventKindSignatureDelta || events[index].Delta != nil && events[index].Delta.Signature != "" {
 			events[index].ProviderExtensions = &model.ProviderExtensions{OpenAIChat: &model.ProtocolExtension{}}
 		}
@@ -101,22 +132,31 @@ func parseStreamError(frame model.StreamFrame) error {
 		return nil
 	}
 	var envelope struct {
-		Event     string          `json:"event"`
+		Event     json.RawMessage `json:"event"`
+		Type      json.RawMessage `json:"type"`
+		Status    json.RawMessage `json:"status"`
 		Error     json.RawMessage `json:"error"`
-		RequestID string          `json:"request_id"`
-		Data      *struct {
-			Error     json.RawMessage `json:"error"`
-			RequestID string          `json:"request_id"`
-		} `json:"data"`
+		RequestID json.RawMessage `json:"request_id"`
+		Data      json.RawMessage `json:"data"`
 	}
 	if err := json.Unmarshal(data, &envelope); err != nil {
 		return fmt.Errorf("invalid Chat frame: %w", err)
 	}
-	if len(envelope.Error) == 0 && envelope.Data != nil {
-		envelope.Error = envelope.Data.Error
+	var nested struct {
+		Error     json.RawMessage `json:"error"`
+		RequestID json.RawMessage `json:"request_id"`
 	}
-	isError := frame.Event == "error" || envelope.Event == "error"
-	if (len(envelope.Error) == 0 || bytes.Equal(envelope.Error, []byte("null"))) && !isError {
+	nestedData := bytes.TrimSpace(envelope.Data)
+	if len(nestedData) > 0 && nestedData[0] == '{' {
+		if err := json.Unmarshal(nestedData, &nested); err != nil {
+			return fmt.Errorf("invalid Chat error envelope: %w", err)
+		}
+	}
+	if emptyError(envelope.Error) {
+		envelope.Error = nested.Error
+	}
+	isError := frame.Event == "error" || rawString(envelope.Event) == "error" || rawString(envelope.Type) == "error" || rawString(envelope.Status) == "failed"
+	if emptyError(envelope.Error) && !isError {
 		return nil
 	}
 	var wire struct {
@@ -126,8 +166,14 @@ func parseStreamError(frame model.StreamFrame) error {
 		Param     string          `json:"param"`
 		RequestID string          `json:"request_id"`
 	}
-	if len(envelope.Error) > 0 {
+	if !emptyError(envelope.Error) {
 		if err := json.Unmarshal(envelope.Error, &wire); err != nil {
+			if err := json.Unmarshal(envelope.Error, &wire.Message); err != nil {
+				wire.Message = string(envelope.Error)
+			}
+		}
+	} else if isError {
+		if err := json.Unmarshal(data, &wire); err != nil {
 			return fmt.Errorf("invalid Chat error envelope: %w", err)
 		}
 	}
@@ -146,10 +192,40 @@ func parseStreamError(frame model.StreamFrame) error {
 	if wire.Type == "" {
 		wire.Type = "stream_error"
 	}
-	if envelope.RequestID != "" {
-		wire.RequestID = envelope.RequestID
+	if requestID := rawString(envelope.RequestID); requestID != "" {
+		wire.RequestID = requestID
+	} else if requestID := rawString(nested.RequestID); requestID != "" {
+		wire.RequestID = requestID
 	}
 	return &model.ResponseError{Detail: model.ErrorDetail{Code: code, Message: wire.Message, Type: wire.Type, Param: wire.Param, RequestID: wire.RequestID}}
+}
+
+func rawString(raw json.RawMessage) string {
+	var value string
+	if json.Unmarshal(raw, &value) != nil {
+		return ""
+	}
+	return value
+}
+
+func emptyError(raw json.RawMessage) bool {
+	if len(bytes.TrimSpace(raw)) == 0 {
+		return true
+	}
+	var value any
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return false
+	}
+	switch value := value.(type) {
+	case nil:
+		return true
+	case map[string]any:
+		return len(value) == 0
+	case []any:
+		return len(value) == 0
+	default:
+		return false
+	}
 }
 
 type StreamEncoder struct {
@@ -184,7 +260,26 @@ func (encoder *StreamEncoder) Push(ctx context.Context, events []model.StreamEve
 	}
 	for _, event := range events {
 		if event.Delta != nil && event.Delta.Signature != "" && (event.ProviderExtensions == nil || event.ProviderExtensions.OpenAIChat == nil) {
-			return nil, fmt.Errorf("cannot represent another protocol's opaque signature in Chat Completions")
+			raw, err := json.Marshal(event)
+			if err != nil {
+				return nil, err
+			}
+			pending = append(pending, model.StreamEvent{Kind: model.StreamEventKindMessageDelta, ID: event.ID, Model: event.Model, Index: event.Index, Message: &model.Message{ProviderExtensions: chatExtensions(model.ProtocolFields{"reasoning_metadata": raw})}})
+			delta := *event.Delta
+			delta.Signature = ""
+			event.Delta = &delta
+			if event.Kind == model.StreamEventKindSignatureDelta {
+				continue
+			}
+		}
+		if event.Kind == model.StreamEventKindNativeItem && event.NativeItem != nil && event.NativeItem.Position < 0 {
+			raw, err := json.Marshal([]model.ProtocolItem{*event.NativeItem})
+			if err != nil {
+				return nil, err
+			}
+			event.Kind = model.StreamEventKindMetadata
+			event.ProviderExtensions = chatExtensions(model.ProtocolFields{"protocol_events": raw})
+			event.NativeItem = nil
 		}
 		if event.NativeItem != nil {
 			if err := validateNativeItems([]model.ProtocolItem{*event.NativeItem}); err != nil {
@@ -192,13 +287,25 @@ func (encoder *StreamEncoder) Push(ctx context.Context, events []model.StreamEve
 			}
 		}
 		if event.Kind == model.StreamEventKindNativeItem {
-			return nil, fmt.Errorf("cannot represent native protocol event in Chat Completions")
+			if event.NativeItem == nil {
+				return nil, fmt.Errorf("native protocol event missing payload")
+			}
+			fields, err := preserveReasoningItems(nil, &model.ProviderExtensions{OpenAIResponses: &model.ProtocolExtension{Items: []model.ProtocolItem{*event.NativeItem}}}, nil)
+			if err != nil {
+				return nil, err
+			}
+			if len(fields) == 0 {
+				return nil, fmt.Errorf("cannot represent native protocol event in Chat Completions")
+			}
+			event.Kind = model.StreamEventKindMetadata
+			event.ProviderExtensions = chatExtensions(fields)
+			event.NativeItem = nil
 		}
 		if event.Kind == model.StreamEventKindError {
 			if event.Error != nil {
 				return nil, event.Error
 			}
-			continue
+			return nil, &model.ResponseError{Detail: model.ErrorDetail{Message: "stream error", Type: "stream_error"}}
 		}
 		if event.Kind == model.StreamEventKindDone {
 			if err := flush(); err != nil {
@@ -210,12 +317,10 @@ func (encoder *StreamEncoder) Push(ctx context.Context, events []model.StreamEve
 			}
 			continue
 		}
-		if encoder.done {
-			return nil, fmt.Errorf("Chat output after terminal marker")
-		}
 		if event.Kind == model.StreamEventKindCitationDelta && event.Citation != nil {
 			if event.Citation.URL == nil {
-				return nil, fmt.Errorf("cannot represent document citation in Chat Completions")
+				pending = append(pending, event)
+				continue
 			}
 			event.Kind = model.StreamEventKindMessageDelta
 			event.Message = &model.Message{Annotations: []model.Annotation{{Type: "url_citation", StartIndex: event.Citation.StartIndex, EndIndex: event.Citation.EndIndex, URLCitation: &model.URLCitation{URL: *event.Citation.URL}}}}

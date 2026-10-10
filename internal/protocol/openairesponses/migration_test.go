@@ -198,10 +198,25 @@ func TestPinnedTimestampAndErrorUnion(t *testing.T) {
 			t.Fatalf("%s: %v %d", timestamp, err, response.CreatedAt)
 		}
 	}
-	for _, timestamp := range []string{"1786360449.5", "9223372036854775808", "1e1000000", `"1786360449"`} {
+	for _, fixture := range []struct {
+		timestamp string
+		seconds   int64
+	}{
+		{"1786360449.5", 1786360449},
+		{"9223372036854775808", 0},
+		{"1e1000000", 0},
+		{`"1786360449"`, 1786360449},
+	} {
 		var response wire.Response
-		if err := json.Unmarshal([]byte(`{"created_at":`+timestamp+`}`), &response); err == nil {
-			t.Fatalf("accepted %s", timestamp)
+		if err := json.Unmarshal([]byte(`{"created_at":`+fixture.timestamp+`}`), &response); err != nil || response.CreatedAt != fixture.seconds {
+			t.Fatalf("%s: %v %d", fixture.timestamp, err, response.CreatedAt)
+		}
+		encoded, err := json.Marshal(response)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := string(decodeObject(t, encoded)["created_at"]); got != fixture.timestamp {
+			t.Fatalf("timestamp changed: got %s, want %s", got, fixture.timestamp)
 		}
 	}
 	for _, code := range []string{`"upstream_error"`, "500", "null"} {

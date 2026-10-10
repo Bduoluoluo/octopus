@@ -323,7 +323,7 @@ func observeWSPassthroughEvent(stats *wsPassthroughStats, data []byte) {
 	if event.Usage != nil {
 		stats.Usage = event.Usage.toInternal()
 	}
-	if event.Error != nil {
+	if event.Error != nil && (event.Error.Message != "" || event.Error.Type != "" || normalizeWSUpstreamErrorCode(event.Error.Code) != "") {
 		stats.Error = &wsUpstreamEventError{Status: event.Status, Code: normalizeWSUpstreamErrorCode(event.Error.Code), Type: event.Error.Type, Message: event.Error.Message}
 	}
 	if event.Response != nil {
@@ -339,7 +339,7 @@ func observeWSPassthroughEvent(stats *wsPassthroughStats, data []byte) {
 		if event.Response.Usage != nil {
 			stats.Usage = event.Response.Usage.toInternal()
 		}
-		if event.Response.Error != nil {
+		if event.Response.Error != nil && (event.Response.Error.Message != "" || event.Response.Error.Type != "" || normalizeWSUpstreamErrorCode(event.Response.Error.Code) != "") {
 			status := event.Status
 			if status == 0 {
 				status = http.StatusBadGateway

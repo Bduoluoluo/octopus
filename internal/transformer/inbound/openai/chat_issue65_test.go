@@ -2,6 +2,7 @@ package openai
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -15,17 +16,28 @@ import (
 // reached the panic in production (e.g. usage-less UsageDelta events).
 func TestTransformStreamEventsNilAggregateDoesNotPanic(t *testing.T) {
 	tests := []struct {
-		name   string
-		events []model.StreamEvent
+		name      string
+		events    []model.StreamEvent
+		wantError bool
 	}{
 		{name: "empty slice", events: []model.StreamEvent{}},
 		{name: "usage_delta with nil Usage", events: []model.StreamEvent{{Kind: model.StreamEventKindUsageDelta, Usage: nil}}},
-		{name: "error event with nil Error", events: []model.StreamEvent{{Kind: model.StreamEventKindError, Error: nil}}},
+		{name: "error event with nil Error", events: []model.StreamEvent{{Kind: model.StreamEventKindError, Error: nil}}, wantError: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			inbound := &ChatInbound{}
 			data, err := inbound.TransformStreamEvents(context.Background(), tt.events)
+			if tt.wantError {
+				var upstreamError *model.ResponseError
+				if !errors.As(err, &upstreamError) || upstreamError.Detail.Message == "" {
+					t.Fatalf("explicit error event swallowed: %v", err)
+				}
+				if len(data) != 0 {
+					t.Fatalf("invented success for error event: %q", data)
+				}
+				return
+			}
 			if err != nil {
 				t.Fatalf("expected nil error for nil aggregate, got %v", err)
 			}

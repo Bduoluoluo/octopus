@@ -90,6 +90,16 @@ func (value *Request) UnmarshalJSON(data []byte) error {
 	}
 	*value = Request(decoded)
 	value.Fields = fields
+	if value.ToolChoice != nil && value.ToolChoice.NamedToolChoice != nil {
+		choiceType := value.ToolChoice.NamedToolChoice.Type
+		if choiceType != "function" && choiceType != "allowed_tools" {
+			var raw model.ProtocolFields
+			if err := json.Unmarshal(data, &raw); err != nil {
+				return err
+			}
+			value.Fields["tool_choice"] = raw["tool_choice"]
+		}
+	}
 	return nil
 }
 
@@ -169,12 +179,29 @@ func (value MessageContentPart) MarshalJSON() ([]byte, error) {
 func (value *Response) UnmarshalJSON(data []byte) error {
 	type plain Response
 	var decoded plain
+	var envelope model.ProtocolFields
+	if err := json.Unmarshal(data, &envelope); err != nil {
+		return err
+	}
+	var preservedError json.RawMessage
+	if raw, exists := envelope["error"]; exists && emptyError(raw) {
+		preservedError = raw
+		delete(envelope, "error")
+		var err error
+		data, err = json.Marshal(envelope)
+		if err != nil {
+			return err
+		}
+	}
 	fields, err := decodeFields(data, &decoded)
 	if err != nil {
 		return err
 	}
 	*value = Response(decoded)
 	value.Fields = fields
+	if len(preservedError) > 0 {
+		value.Fields["error"] = preservedError
+	}
 	return nil
 }
 

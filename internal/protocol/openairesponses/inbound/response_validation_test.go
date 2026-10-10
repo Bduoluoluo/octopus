@@ -2,38 +2,24 @@ package inbound
 
 import "testing"
 
-func TestValidateReasoningEffort(t *testing.T) {
-	cases := map[string]string{
-		"minimal": "minimal",
-		"low":     "low",
-		"medium":  "medium",
-		"high":    "high",
-		"":        "",
-		"turbo":   "",
-		"ultra":   "",
-		"MEDIUM":  "", // case-sensitive whitelist
-		" low":    "",
-	}
-	for in, want := range cases {
-		if got := validateReasoningEffort(in); got != want {
-			t.Errorf("validateReasoningEffort(%q) = %q, want %q", in, got, want)
+func TestPreserveReasoningEffort(t *testing.T) {
+	for _, effort := range []string{"minimal", "low", "medium", "high", "", "turbo", "ultra", "MEDIUM", " low"} {
+		request, err := convertToInternalRequest(&ResponsesRequest{Model: "m", Reasoning: &ResponsesReasoning{Effort: effort}})
+		if err != nil || request.ReasoningEffort != effort {
+			t.Fatalf("reasoning effort %q changed: %+v %v", effort, request, err)
 		}
 	}
 }
 
-func TestValidateReasoningSummary(t *testing.T) {
-	cases := map[string]string{
-		"auto":     "auto",
-		"concise":  "concise",
-		"detailed": "detailed",
-		"":         "",
-		"brief":    "",
-		"verbose":  "",
-		"Auto":     "",
-	}
-	for in, want := range cases {
-		if got := validateReasoningSummary(in); got != want {
-			t.Errorf("validateReasoningSummary(%q) = %q, want %q", in, got, want)
+func TestPreserveReasoningSummary(t *testing.T) {
+	for _, summary := range []string{"auto", "concise", "detailed", "", "brief", "verbose", "Auto"} {
+		request, err := convertToInternalRequest(&ResponsesRequest{Model: "m", Reasoning: &ResponsesReasoning{Summary: &summary}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		options := request.GetOpenAIResponsesOptions()
+		if options.ReasoningSummary == nil || *options.ReasoningSummary != summary {
+			t.Fatalf("reasoning summary %q changed: %+v", summary, options)
 		}
 	}
 }
@@ -50,13 +36,13 @@ func TestResponsesTerminalEvent(t *testing.T) {
 		{"pause_turn", "response.incomplete", "incomplete"},
 		{"error", "response.failed", "failed"},
 		{"malformed_function_call", "response.failed", "failed"},
-		{"safety", "response.failed", "failed"},
-		{"recitation", "response.failed", "failed"},
-		{"content_filter", "response.failed", "failed"},
-		{"refusal", "response.failed", "failed"},
-		{"prohibited_content", "response.failed", "failed"},
-		{"spii", "response.failed", "failed"},
-		{"image_safety", "response.failed", "failed"},
+		{"safety", "response.incomplete", "incomplete"},
+		{"recitation", "response.incomplete", "incomplete"},
+		{"content_filter", "response.incomplete", "incomplete"},
+		{"refusal", "response.completed", "completed"},
+		{"prohibited_content", "response.incomplete", "incomplete"},
+		{"spii", "response.incomplete", "incomplete"},
+		{"image_safety", "response.incomplete", "incomplete"},
 		{"", "response.completed", "completed"},
 	}
 	for _, tc := range cases {

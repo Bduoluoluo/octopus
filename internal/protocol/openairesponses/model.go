@@ -11,7 +11,6 @@ import (
 	"strings"
 
 	"github.com/xuanli27/octopus/internal/protocol/shared"
-	xjson "github.com/xuanli27/octopus/internal/protocol/shared"
 	"github.com/xuanli27/octopus/internal/transformer/model"
 )
 
@@ -33,7 +32,7 @@ type Tool struct {
 	Description string `json:"description,omitempty"`
 
 	// This field is from variant [FunctionTool].
-	Parameters map[string]any `json:"parameters,omitempty"`
+	Parameters any `json:"parameters,omitempty"`
 	// This field is from variant [FunctionTool].
 	Strict *bool `json:"strict,omitempty"`
 
@@ -176,6 +175,7 @@ type Prompt struct {
 
 // Reasoning represents configuration options for reasoning models.
 type Reasoning struct {
+	Fields model.ProtocolFields `json:"-"`
 	// The reasoning context scope requested by internal Responses features.
 	// Responses Lite requires "all_turns" when this field is emitted.
 	Context string `json:"context,omitempty"`
@@ -197,6 +197,7 @@ type StreamOptions struct {
 
 // ToolChoice represents how the model should select which tool to use (for requests).
 type ToolChoice struct {
+	Raw       json.RawMessage      `json:"-"`
 	Fields    model.ProtocolFields `json:"-"`
 	Namespace *string              `json:"namespace,omitempty"`
 	// Mode can be "none", "auto", "required".
@@ -218,25 +219,37 @@ type ToolOption struct {
 type ToolChoiceAlias ToolChoice
 
 func (t *ToolChoice) UnmarshalJSON(data []byte) error {
-	mode, err := xjson.To[string](data)
-	if err == nil {
-		t.Mode = &mode
-		return nil
+	var raw json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
 	}
-
-	tc, err := xjson.To[ToolChoiceAlias](data)
-	if err == nil {
-		*t = ToolChoice(tc)
-		if err := json.Unmarshal(data, &t.Fields); err != nil {
+	var decoded ToolChoiceAlias
+	switch bytes.TrimSpace(raw)[0] {
+	case '"':
+		if err := json.Unmarshal(raw, &decoded.Mode); err != nil {
 			return err
 		}
-		return nil
+	case '{':
+		if err := json.Unmarshal(raw, &decoded); err != nil {
+			var typeError *json.UnmarshalTypeError
+			if !errors.As(err, &typeError) {
+				return err
+			}
+			decoded = ToolChoiceAlias{}
+		}
+		if err := json.Unmarshal(raw, &decoded.Fields); err != nil {
+			return err
+		}
 	}
-
-	return errors.New("invalid tool choice type")
+	decoded.Raw = raw
+	*t = ToolChoice(decoded)
+	return nil
 }
 
 func (t *ToolChoice) MarshalJSON() ([]byte, error) {
+	if len(t.Raw) > 0 {
+		return json.Marshal(t.Raw)
+	}
 	if t.Mode != nil && t.Type == nil && t.Name == nil && len(t.Tools) == 0 {
 		return json.Marshal(*t.Mode)
 	}
@@ -250,6 +263,7 @@ func (t *ToolChoice) MarshalJSON() ([]byte, error) {
 
 // ResponseToolChoice represents tool_choice in responses, which can be a string or object.
 type ResponseToolChoice struct {
+	Raw json.RawMessage
 	// String value when tool_choice is a simple string like "auto", "none", "required".
 	// StringValue and ObjectValue are mutually exclusive representations of tool_choice.
 	// If both are populated, StringValue takes precedence during marshaling.
@@ -262,6 +276,7 @@ func (r *ResponseToolChoice) UnmarshalJSON(data []byte) error {
 	// Try to unmarshal as string first
 	var str string
 	if err := json.Unmarshal(data, &str); err == nil {
+		r.Raw = append(json.RawMessage(nil), data...)
 		r.StringValue = str
 		r.ObjectValue = nil
 
@@ -271,6 +286,7 @@ func (r *ResponseToolChoice) UnmarshalJSON(data []byte) error {
 	// Try to unmarshal as object
 	var obj ToolChoice
 	if err := json.Unmarshal(data, &obj); err == nil {
+		r.Raw = nil
 		r.StringValue = ""
 		r.ObjectValue = &obj
 
@@ -287,6 +303,9 @@ func (r ResponseToolChoice) MarshalJSON() ([]byte, error) {
 
 	if r.ObjectValue != nil {
 		return json.Marshal(r.ObjectValue)
+	}
+	if len(r.Raw) > 0 {
+		return json.Marshal(r.Raw)
 	}
 
 	return []byte("null"), nil
@@ -358,6 +377,10 @@ type Input struct {
 }
 
 func (i *Input) UnmarshalJSON(data []byte) error {
+	var raw json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
 	*i = Input{}
 	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
 		return nil
@@ -378,7 +401,8 @@ func (i *Input) UnmarshalJSON(data []byte) error {
 		return nil
 	}
 
-	return fmt.Errorf("invalid input: %w", shared.ErrInvalidRequest)
+	i.Raw = raw
+	return nil
 }
 
 func (i Input) MarshalJSON() ([]byte, error) {
@@ -948,53 +972,31 @@ type Response struct {
 	User *string `json:"user,omitempty"`
 }
 
-// UnmarshalJSON implements json.Unmarshaler for Response so that created_at
-// accepts both integer (1786360449) and float-encoded integral (1786360449.0)
-// unix timestamps. Some Responses-compatible providers serialize integer
-// timestamps as JSON floats (e.g. Python's 1786360449.0); the value is always
-// kept as int64 internally. Every other field uses the default decoding.
 func (r *Response) UnmarshalJSON(data []byte) error {
 	type alias Response
 
+	var decoded alias
 	var raw struct {
 		CreatedAt json.RawMessage `json:"created_at"`
 		*alias
 	}
-	raw.alias = (*alias)(r)
+	raw.alias = &decoded
 
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
 	}
 
-	if err := json.Unmarshal(data, &r.Fields); err != nil {
+	if err := json.Unmarshal(data, &decoded.Fields); err != nil {
 		return err
 	}
-	if len(raw.CreatedAt) == 0 || xjson.IsNull(raw.CreatedAt) {
-		return nil
+	decoded.CreatedAt = responseCreatedAtSeconds(raw.CreatedAt)
+	if decoded.Error != nil && responseHasEmptyError(decoded.Status, decoded.Fields["error"]) {
+		decoded.Error = nil
 	}
-
-	// created_at must be a JSON number. Reject string forms such as
-	// "1786360449" so the previous int64 field behavior is preserved.
-	if c := raw.CreatedAt[0]; c != '-' && (c < '0' || c > '9') {
-		return fmt.Errorf("invalid responses api created_at: must be a JSON number, got %q", string(raw.CreatedAt))
-	}
-
-	createdAt, err := parseCreatedAtSeconds(string(raw.CreatedAt))
-	if err != nil {
-		return fmt.Errorf("invalid responses api created_at: %w", err)
-	}
-	r.CreatedAt = createdAt
-
+	*r = Response(decoded)
 	return nil
 }
 
-// parseCreatedAtSeconds converts a JSON created_at number lexeme to an int64
-// unix timestamp. The integer form (1786360449) is parsed directly; float
-// forms such as 1786360449.0 are validated with pure lexeme arithmetic so
-// that non-integral values (1786360449.5), int64 overflow, and excessive
-// exponents (1e1000000) are rejected without materializing arbitrary
-// precision numbers. Non-normalized scientific notation such as
-// 170000000000000000000000000000e-20 (exactly 1700000000) is accepted.
 func parseCreatedAtSeconds(raw string) (int64, error) {
 	// Integer form: ParseInt handles int64 range checks directly.
 	if v, err := strconv.ParseInt(raw, 10, 64); err == nil {
@@ -1038,26 +1040,13 @@ func parseCreatedAtSeconds(raw string) (int64, error) {
 		return 0, nil
 	}
 
-	// trailingZeros bounds how many zeros a negative exponent can cancel
-	// before the value stops being an integer (e.g. 1786360449.5).
-	trailingZeros := 0
-	for i := len(digits) - 1; i >= 0 && digits[i] == '0'; i-- {
-		trailingZeros++
-	}
-
-	// Bound the exponent against the mantissa before computing the scale, so
-	// machine integer arithmetic cannot overflow on values such as
-	// 1e-9223372036854775808. These bounds are exact: a non-zero value with
-	// exp > len(frac)+19 is at least 10^19 and overflows int64, while a
-	// negative exp beyond trailingZeros cannot be canceled into an integer.
 	switch {
 	case exp > len(frac)+19:
 		return 0, fmt.Errorf("created_at %q is out of int64 range", raw)
-	case exp < -trailingZeros:
-		return 0, fmt.Errorf("created_at must be an integer number of seconds, got %q", raw)
+	case exp < -len(sig):
+		return 0, nil
 	}
 
-	// scale = len(frac) - exp is now bounded: |scale| <= max(19, len(frac)+trailingZeros).
 	scale := len(frac) - exp
 	switch {
 	case scale < 0:
@@ -1068,15 +1057,8 @@ func parseCreatedAtSeconds(raw string) (int64, error) {
 		}
 		sig += strings.Repeat("0", -scale)
 	case scale > 0:
-		// Strip trailing zeros: an insufficient zero tail means the value is
-		// not an integer (e.g. 1786360449.5).
 		if len(sig) <= scale {
-			return 0, fmt.Errorf("created_at must be an integer number of seconds, got %q", raw)
-		}
-		for _, c := range sig[len(sig)-scale:] {
-			if c != '0' {
-				return 0, fmt.Errorf("created_at must be an integer number of seconds, got %q", raw)
-			}
+			return 0, nil
 		}
 		sig = sig[:len(sig)-scale]
 	}
@@ -1106,10 +1088,11 @@ type ContentItem struct {
 }
 
 type Error struct {
-	Type    string `json:"type,omitempty"`
-	Code    string `json:"code,omitempty"`
-	Message string `json:"message"`
-	Param   string `json:"param,omitempty"`
+	Fields  model.ProtocolFields `json:"-"`
+	Type    string               `json:"type,omitempty"`
+	Code    string               `json:"code,omitempty"`
+	Message string               `json:"message"`
+	Param   string               `json:"param,omitempty"`
 }
 
 type rawJSONSchema struct {

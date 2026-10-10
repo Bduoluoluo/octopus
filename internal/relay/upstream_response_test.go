@@ -14,7 +14,6 @@ import (
 	"github.com/gin-gonic/gin"
 	dbmodel "github.com/xuanli27/octopus/internal/model"
 	"github.com/xuanli27/octopus/internal/op"
-	"github.com/xuanli27/octopus/internal/relay/stream"
 	"github.com/xuanli27/octopus/internal/transformer/inbound"
 	"github.com/xuanli27/octopus/internal/transformer/model"
 	"github.com/xuanli27/octopus/internal/transformer/outbound"
@@ -36,6 +35,15 @@ func TestUpstreamPayloadError(t *testing.T) {
 		{`{"code":500,"message":"platform failed"}`, "", 500},
 		{`{"status":503,"message":"platform failed"}`, "", 503},
 		{`{"error":null,"status":"completed","output":[]}`, "", 0},
+		{`{"error":{},"status":"completed","output":[]}`, "", 0},
+		{`{"error": { },"choices":[{"message":{"content":"ok"}}]}`, "", 0},
+		{`{"error": [],"choices":[{"message":{"content":"ok"}}]}`, "", 0},
+		{`{"error":" ","choices":[{"message":{"content":"ok"}}]}`, "", 0},
+		{`{"type":"response.completed","response":{"error":{},"status":"completed","output":[]}}`, "", 0},
+		{`{"type":"response.failed","response":{"error":{},"status":"failed"}}`, "", 502},
+		{`{"error":{},"status":"failed"}`, "", 502},
+		{`{"error":{},"message":"failed"}`, "error", 502},
+		{`{"error":{"message":"still a failure"},"choices":[{"message":{"content":"partial"}}]}`, "", 502},
 		{`{"status":"incomplete","incomplete_details":{"reason":"max_output_tokens"},"error":null}`, "", 0},
 		{`{"choices":[{"message":{"content":"upstream error: 429"}}]}`, "", 0},
 		{`{"type":"response.output_text.delta","delta":"error"}`, "", 0},
@@ -358,12 +366,6 @@ func TestUpstreamBufferedUsagePreservesSuccessfulStream(t *testing.T) {
 			}
 			body += "event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":2}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
 			err := attempt.handleStreamResponsePassthroughV2(context.Background(), sseTestResponse(body), model.PassthroughConfig{CollectMetrics: true})
-			if terminalOnly {
-				if !errors.Is(err, stream.ErrEmptyUpstreamStream) || recorder.Body.Len() != 0 || attempt.streamPayloadWritten.Load() {
-					t.Fatalf("empty terminal stream committed: err=%v body=%q", err, recorder.Body.String())
-				}
-				return
-			}
 			if err != nil {
 				t.Fatal(err)
 			}

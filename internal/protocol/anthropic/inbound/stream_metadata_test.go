@@ -61,7 +61,7 @@ func TestSupplementalEventsRejectUnrepresentableContent(t *testing.T) {
 	events := []model.StreamEvent{
 		{Kind: model.StreamEventKindMessageDelta, Message: &model.Message{Audio: &model.OutputAudio{Data: "audio"}}},
 		{Kind: model.StreamEventKindMessageDelta, Message: &model.Message{Images: []model.MessageContentPart{{Type: "image_url"}}}},
-		{Kind: model.StreamEventKindMessageDelta, Message: &model.Message{Annotations: []model.Annotation{{Type: "url_citation", URLCitation: &model.URLCitation{URL: "https://example.test"}}}}},
+		{Kind: model.StreamEventKindMessageDelta, Message: &model.Message{Annotations: []model.Annotation{{Type: "file_citation"}}}},
 		{Kind: model.StreamEventKindMessageDelta, Logprobs: &model.LogprobsContent{}},
 		{Kind: model.StreamEventKindMetadata, Delta: &model.StreamDelta{Text: "hidden content"}},
 	}

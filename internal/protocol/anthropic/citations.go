@@ -51,12 +51,14 @@ func (block *MessageContentBlock) UnmarshalJSON(data []byte) error {
 	if raw, exists := decoded.Fields["citations"]; exists && !bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
 		switch decoded.Type {
 		case "document":
-			if err := json.Unmarshal(raw, &decoded.CitationConfig); err != nil {
-				return fmt.Errorf("document citations must be a configuration object: %w", err)
+			var config CitationConfig
+			if err := json.Unmarshal(raw, &config); err == nil && bytes.HasPrefix(bytes.TrimSpace(raw), []byte("{")) {
+				decoded.CitationConfig = &config
 			}
 		case "text":
-			if err := json.Unmarshal(raw, &decoded.Citations); err != nil {
-				return fmt.Errorf("text citations must be an array: %w", err)
+			var citations []TextCitation
+			if err := json.Unmarshal(raw, &citations); err == nil {
+				decoded.Citations = citations
 			}
 		}
 	}

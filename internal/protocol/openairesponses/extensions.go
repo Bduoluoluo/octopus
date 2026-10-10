@@ -118,6 +118,55 @@ func (tool Tool) MarshalJSON() ([]byte, error) {
 	return mergeUnknownFields(body, tool.Fields, tool)
 }
 
+func (reasoning *Reasoning) UnmarshalJSON(body []byte) error {
+	type plain Reasoning
+	var decoded plain
+	if err := json.Unmarshal(body, &decoded); err != nil {
+		return err
+	}
+	if err := json.Unmarshal(body, &decoded.Fields); err != nil {
+		return err
+	}
+	*reasoning = Reasoning(decoded)
+	return nil
+}
+
+func (reasoning Reasoning) MarshalJSON() ([]byte, error) {
+	type plain Reasoning
+	body, err := json.Marshal(plain(reasoning))
+	if err != nil {
+		return nil, err
+	}
+	return mergeUnknownFields(body, reasoning.Fields, reasoning)
+}
+
+func responseCreatedAtSeconds(raw json.RawMessage) int64 {
+	var number json.Number
+	if err := json.Unmarshal(raw, &number); err != nil {
+		return 0
+	}
+	seconds, err := parseCreatedAtSeconds(number.String())
+	if err != nil {
+		return 0
+	}
+	return seconds
+}
+
+func responseHasEmptyError(status *string, raw json.RawMessage) bool {
+	if status != nil {
+		switch strings.ToLower(strings.TrimSpace(*status)) {
+		case "failed", "error", "cancelled", "canceled":
+			return false
+		}
+	}
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 || trimmed[0] != '{' {
+		return false
+	}
+	var fields model.ProtocolFields
+	return json.Unmarshal(trimmed, &fields) == nil && len(fields) == 0
+}
+
 func (response Response) MarshalJSON() ([]byte, error) {
 	type plain Response
 	body, err := json.Marshal(plain(response))
@@ -131,6 +180,12 @@ func (response Response) MarshalJSON() ([]byte, error) {
 	var fields model.ProtocolFields
 	if err := json.Unmarshal(body, &fields); err != nil {
 		return nil, err
+	}
+	if raw := response.Fields["created_at"]; len(raw) > 0 && responseCreatedAtSeconds(raw) == response.CreatedAt {
+		fields["created_at"] = raw
+	}
+	if response.Error == nil && responseHasEmptyError(response.Status, response.Fields["error"]) {
+		delete(fields, "error")
 	}
 	for key, raw := range response.Fields {
 		switch key {
@@ -164,24 +219,36 @@ func (annotation Annotation) MarshalJSON() ([]byte, error) {
 
 func (detail *Error) UnmarshalJSON(body []byte) error {
 	type plain Error
+	var decoded plain
 	var wire struct {
 		*plain
 		Code json.RawMessage `json:"code"`
 	}
-	wire.plain = (*plain)(detail)
+	wire.plain = &decoded
 	if err := json.Unmarshal(body, &wire); err != nil {
 		return err
 	}
-	if len(wire.Code) == 0 || bytes.Equal(wire.Code, []byte("null")) {
-		return nil
-	}
-	if err := json.Unmarshal(wire.Code, &detail.Code); err == nil {
-		return nil
-	}
-	var number json.Number
-	if err := json.Unmarshal(wire.Code, &number); err != nil {
+	if err := json.Unmarshal(body, &decoded.Fields); err != nil {
 		return err
 	}
-	detail.Code = number.String()
+	if len(wire.Code) > 0 && !bytes.Equal(wire.Code, []byte("null")) {
+		if err := json.Unmarshal(wire.Code, &decoded.Code); err != nil {
+			var number json.Number
+			if err := json.Unmarshal(wire.Code, &number); err != nil {
+				return err
+			}
+			decoded.Code = number.String()
+		}
+	}
+	*detail = Error(decoded)
 	return nil
+}
+
+func (detail Error) MarshalJSON() ([]byte, error) {
+	type plain Error
+	body, err := json.Marshal(plain(detail))
+	if err != nil {
+		return nil, err
+	}
+	return mergeUnknownFields(body, detail.Fields, detail)
 }

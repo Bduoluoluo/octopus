@@ -75,3 +75,27 @@ P6 cross-protocol boundary audit:
   Responses decoding, root-only signature provenance, custom calls, Chat audio,
   multi-choice requests/responses, per-batch rejection and unknown same-protocol
   Anthropic preservation. No shared IR, relay or routing code is modified.
+
+Post-migration compatibility tolerance:
+
+- Native citation shapes and nested content JSON remain in raw fields when their
+  provider-specific shape has no typed projection. Invalid outer JSON still fails.
+- Decoded Anthropic frames carry their raw event/data/ID through the existing
+  extension carrier. The same-protocol encoder emits each frame once, preserving
+  unknown fields, deltas and lifecycle variations while applying the public model
+  alias to message_start. Typed projections remain available to metrics and other
+  protocol encoders; this introduces no second request/response IR.
+- Repeated starts/stops, late deltas and absent optional delta values no longer
+  reject native streams. A stop_reason or [DONE] completes EOF; an EOF without a
+  terminal signal remains an error. Explicit error events and meaningful error
+  envelopes still fail, including after a completion signal; error:{} alone does
+  not make a successful response fail.
+- Cross-protocol refusal is rendered as text (non-stream responses also retain
+  stop_reason=refusal). URL annotations become web_search_result_location citations
+  with URLs, titles, zero-based positions and extension fields preserved. No source
+  document index or encrypted_index is fabricated, so the destination provider
+  remains responsible for accepting these citation extensions.
+- Cross-protocol audio, native-only tools, opaque reasoning, multiple choices,
+  logprobs and unsupported citation kinds retain explicit conversion guards until
+  their content can be represented. Shared aggregation of incomplete streamed tool
+  arguments needs coordination outside this Anthropic-only change.

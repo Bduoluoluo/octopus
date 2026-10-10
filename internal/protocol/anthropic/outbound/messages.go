@@ -30,6 +30,7 @@ type MessageOutbound struct {
 	blocks      map[int]*streamBlock
 	wireUsage   *anthropicModel.Usage
 	terminal    bool
+	finished    bool
 	closed      bool
 	streamError error
 }
@@ -49,6 +50,9 @@ func (o *MessageOutbound) TransformRequest(ctx context.Context, request *model.I
 	}
 	if err := validateNativeContent(request); err != nil {
 		return nil, err
+	}
+	for index := range request.Messages {
+		request.Messages[index] = anthropicModel.NormalizeMessageMetadata(request.Messages[index])
 	}
 
 	request.NormalizeMessages()
@@ -321,11 +325,11 @@ func (o *MessageOutbound) TransformResponse(ctx context.Context, response *http.
 	}
 
 	// Convert to internal response
-	if anthropicResp.Type == "error" {
-		var envelope anthropicModel.AnthropicError
-		if err := json.Unmarshal(body, &envelope); err != nil {
-			return nil, err
-		}
+	var envelope anthropicModel.AnthropicError
+	if err := json.Unmarshal(body, &envelope); err != nil {
+		return nil, err
+	}
+	if anthropicResp.Type == "error" || envelope.Error.Type != "" || envelope.Error.Message != "" {
 		return nil, &model.ResponseError{StatusCode: mapAnthropicErrorTypeToStatus(envelope.Error.Type), Detail: model.ErrorDetail{Type: envelope.Error.Type, Message: envelope.Error.Message}}
 	}
 	result := convertToLLMResponse(&anthropicResp)

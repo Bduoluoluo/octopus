@@ -140,7 +140,7 @@ func TestConvertToResponsesAPIResponsePreservesRefusalContent(t *testing.T) {
 	if part.Type != "refusal" || part.Refusal == nil || *part.Refusal != "I cannot help with that." {
 		t.Fatalf("expected refusal content item, got %+v", part)
 	}
-	if out.Status == nil || *out.Status != "failed" {
-		t.Fatalf("expected failed status for refusal stop, got %v", out.Status)
+	if out.Status == nil || *out.Status != "completed" {
+		t.Fatalf("expected completed status for a valid refusal, got %v", out.Status)
 	}
 }

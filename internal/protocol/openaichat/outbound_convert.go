@@ -2,6 +2,7 @@ package openaichat
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/samber/lo"
 
@@ -61,15 +62,20 @@ func RequestFromLLM(ctx context.Context, r *model.InternalLLMRequest, reasoningF
 		}
 	}
 
-	// Convert Tools – only include function tools; other types
-	// (image_generation, responses_custom_tool, etc.) are not supported
-	// by the Chat Completions API and must be filtered out.
-	req.Tools = lo.FilterMap(r.Tools, func(t model.Tool, _ int) (Tool, bool) {
-		return ToolFromLLM(t), t.Type == "function"
+	req.Tools = lo.Map(r.Tools, func(t model.Tool, _ int) Tool {
+		return ToolFromLLM(t)
 	})
 
 	// Convert ToolChoice
 	req.ToolChoice = ToolChoiceFromLLM(r.ToolChoice)
+	if raw := req.Fields["tool_choice"]; len(raw) > 0 && req.ToolChoice != nil && req.ToolChoice.NamedToolChoice != nil {
+		var original struct {
+			Type string `json:"type"`
+		}
+		if json.Unmarshal(raw, &original) == nil && original.Type == req.ToolChoice.NamedToolChoice.Type && original.Type != "function" && original.Type != "allowed_tools" {
+			req.ToolChoice = nil
+		}
+	}
 
 	// Convert ResponseFormat
 	if r.ResponseFormat != nil {
@@ -130,14 +136,19 @@ func MessageFromLLMWithConfig(m model.Message, reasoningField ReasoningField) Me
 
 	// Build the Message with determined fields
 	msg := Message{
-		Fields:             chatFields(m.ProviderExtensions),
-		ReasoningSignature: m.ReasoningSignature,
-		Role:               m.Role,
-		Name:               m.Name,
-		Refusal:            m.Refusal,
-		ToolCallID:         m.ToolCallID,
-		ReasoningContent:   reasoningContent,
-		Reasoning:          reasoning,
+		Fields:                 chatFields(m.ProviderExtensions),
+		ReasoningSignature:     m.ReasoningSignature,
+		RedactedThinkingBlocks: m.RedactedThinkingBlocks,
+		ReasoningBlocks:        m.ReasoningBlocks,
+		Role:                   m.Role,
+		Name:                   m.Name,
+		Refusal:                m.Refusal,
+		ToolCallID:             m.ToolCallID,
+		ReasoningContent:       reasoningContent,
+		Reasoning:              reasoning,
+	}
+	if m.ReasoningSignature != nil && (m.ProviderExtensions == nil || m.ProviderExtensions.OpenAIChat == nil) {
+		preserveForeignSignature(&msg)
 	}
 
 	if m.Audio != nil {
@@ -208,9 +219,10 @@ func MessageContentFromLLM(c model.MessageContent) MessageContent {
 // MessageContentPartFromLLM creates OpenAI MessageContentPart from unified model.MessageContentPart.
 func MessageContentPartFromLLM(p model.MessageContentPart) MessageContentPart {
 	part := MessageContentPart{
-		Fields: chatFields(p.ProviderExtensions),
-		Type:   normalizeContentPartType(p.Type),
-		Text:   p.Text,
+		Fields:    chatFields(p.ProviderExtensions),
+		Citations: p.Citations,
+		Type:      normalizeContentPartType(p.Type),
+		Text:      p.Text,
 	}
 
 	if p.ImageURL != nil {

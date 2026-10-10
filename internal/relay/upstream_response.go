@@ -32,7 +32,7 @@ func upstreamPayloadError(data []byte, eventType string) error {
 		}
 	}
 	raw := bytes.TrimSpace(payload["error"])
-	if len(raw) > 0 && string(raw) != "null" && string(raw) != "false" && string(raw) != "0" && string(raw) != `""` {
+	if meaningfulUpstreamError(raw) {
 		failed = true
 	} else {
 		raw = data
@@ -75,6 +75,35 @@ func upstreamPayloadError(data []byte, eventType string) error {
 		}
 	}
 	return newUpstreamResponseError(detail, code)
+}
+
+func meaningfulUpstreamError(raw []byte) bool {
+	var value any
+	if len(raw) == 0 {
+		return false
+	}
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	if decoder.Decode(&value) != nil {
+		return true
+	}
+	switch value := value.(type) {
+	case nil:
+		return false
+	case bool:
+		return value
+	case string:
+		return strings.TrimSpace(value) != ""
+	case json.Number:
+		number, err := value.Float64()
+		return err != nil || number != 0
+	case map[string]any:
+		return len(value) > 0
+	case []any:
+		return len(value) > 0
+	default:
+		return true
+	}
 }
 
 func newUpstreamResponseError(detail model.ErrorDetail, code int) *model.ResponseError {
@@ -242,13 +271,13 @@ func guardedStreamTransform(transform stream.StreamTransform, framed bool) strea
 				if err := upstreamPayloadError([]byte(event.Data), event.Type); err != nil {
 					return nil, err
 				}
-				ready = ready || streamEventHasContent([]byte(event.Data), event.Type)
+				ready = ready || streamEventHasContent([]byte(event.Data), event.Type) || streamEventHasCompletion([]byte(event.Data), event.Type)
 			}
 		} else {
 			if err := upstreamPayloadError(data, ""); err != nil {
 				return nil, err
 			}
-			ready = streamEventHasContent(data, "")
+			ready = streamEventHasContent(data, "") || streamEventHasCompletion(data, "")
 		}
 		if !started && !ready {
 			pendingSize += len(data)
@@ -275,4 +304,29 @@ func guardedStreamTransform(transform stream.StreamTransform, framed bool) strea
 		pending = nil
 		return output.Bytes(), nil
 	}
+}
+
+func streamEventHasCompletion(data []byte, eventType string) bool {
+	var payload struct {
+		Type    string `json:"type"`
+		Choices []struct {
+			FinishReason *string `json:"finish_reason"`
+		} `json:"choices"`
+	}
+	if json.Unmarshal(data, &payload) != nil {
+		return false
+	}
+	if payload.Type != "" {
+		eventType = payload.Type
+	}
+	switch eventType {
+	case "message_stop", "response.completed", "response.done", "response.incomplete":
+		return true
+	}
+	for _, choice := range payload.Choices {
+		if choice.FinishReason != nil && *choice.FinishReason != "" {
+			return true
+		}
+	}
+	return false
 }

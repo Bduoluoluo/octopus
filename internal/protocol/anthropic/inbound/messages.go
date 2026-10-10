@@ -354,7 +354,7 @@ func (i *MessagesInbound) TransformRequest(ctx context.Context, body []byte) (*m
 		if err != nil {
 			return nil, fmt.Errorf("capture Anthropic message %d: %w", msgIndex, err)
 		}
-		if hasContent {
+		if hasContent || (!hasToolResult && len(msg.Content.Raw) > 0) {
 			messages = append(messages, chatMsg)
 		}
 		for index := firstMessage; index < len(messages); index++ {
@@ -559,6 +559,8 @@ func (i *MessagesInbound) TransformResponse(ctx context.Context, response *model
 		}
 
 		if message != nil {
+			normalized := anthropic.NormalizeMessageMetadata(*message)
+			message = &normalized
 			var contentBlocks []MessageContentBlock
 
 			// Prefer per-block reasoning provenance when available so multiple thinking /
@@ -704,6 +706,9 @@ func (i *MessagesInbound) TransformResponse(ctx context.Context, response *model
 
 		if choice.StopSequence != nil {
 			resp.StopSequence = choice.StopSequence
+		}
+		if message != nil && message.Refusal != "" && (resp.StopReason == nil || *resp.StopReason == "end_turn") {
+			resp.StopReason = lo.ToPtr("refusal")
 		}
 	}
 

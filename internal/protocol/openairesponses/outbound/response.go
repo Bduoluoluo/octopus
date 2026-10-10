@@ -137,11 +137,14 @@ func (o *ResponseOutbound) TransformRequestRaw(ctx context.Context, rawBody []by
 }
 
 func rewriteRawResponsesRequestModel(rawBody []byte, modelName string) ([]byte, error) {
-	var payload map[string]any
+	var payload map[string]json.RawMessage
 	if err := json.Unmarshal(rawBody, &payload); err != nil {
 		return nil, fmt.Errorf("failed to decode raw responses request: %w", err)
 	}
-	payload["model"] = strings.TrimSpace(modelName)
+	if payload == nil {
+		return nil, fmt.Errorf("raw responses request must be an object")
+	}
+	payload["model"], _ = json.Marshal(strings.TrimSpace(modelName))
 	rewrittenBody, err := json.Marshal(payload)
 	if err != nil {
 		return nil, fmt.Errorf("failed to encode raw responses request: %w", err)

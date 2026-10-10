@@ -1069,17 +1069,11 @@ func convertToInternalRequest(req *ResponsesRequest) (*model.InternalLLMRequest,
 
 	// Convert reasoning
 	if req.Reasoning != nil {
-		if effort := validateReasoningEffort(req.Reasoning.Effort); effort != "" {
-			chatReq.ReasoningEffort = effort
-		}
+		chatReq.ReasoningEffort = req.Reasoning.Effort
 		if req.Reasoning.MaxTokens != nil {
 			chatReq.ReasoningBudget = req.Reasoning.MaxTokens
 		}
-		if req.Reasoning.Summary != nil {
-			if summary := validateReasoningSummary(*req.Reasoning.Summary); summary != "" {
-				reasoningSummary = &summary
-			}
-		}
+		reasoningSummary = req.Reasoning.Summary
 		reasoningGenerateSummary = req.Reasoning.GenerateSummary
 	}
 
@@ -1122,6 +1116,9 @@ func convertToInternalRequest(req *ResponsesRequest) (*model.InternalLLMRequest,
 	}
 	messages = append(messages, inputMessages...)
 	chatReq.Messages = messages
+	if len(inputMessages) == 0 && !chatReq.HasOpenAIResponsesPassthrough() {
+		chatReq.MarkOpenAIResponsesPassthroughRequired("input:no_projected_messages")
+	}
 
 	// Convert tools
 	if len(req.Tools) > 0 {
@@ -1161,16 +1158,44 @@ func markOpenAIResponsesPassthroughIfNeeded(req *ResponsesRequest, chatReq *mode
 	if unsupportedItemType := firstUnsupportedResponsesInputType(&req.Input); unsupportedItemType != "" {
 		chatReq.MarkOpenAIResponsesPassthroughRequired("input:" + unsupportedItemType)
 	}
+	if responsesToolChoiceNeedsPassthrough(req.ToolChoice) {
+		chatReq.MarkOpenAIResponsesPassthroughRequired("tool_choice:native")
+	}
+}
+
+func responsesToolChoiceNeedsPassthrough(choice *ResponsesToolChoice) bool {
+	if choice == nil {
+		return false
+	}
+	if choice.Mode != nil && len(choice.Fields) == 0 {
+		switch *choice.Mode {
+		case "auto", "none", "required":
+			return false
+		}
+	}
+	if choice.Type != nil && *choice.Type == "function" && choice.Name != nil && len(choice.Fields) == 2 {
+		return false
+	}
+	return true
 }
 
 func firstUnsupportedResponsesToolType(tools []ResponsesTool) string {
 	for _, tool := range tools {
 		switch tool.Type {
-		case "function", "image_generation":
+		case "function":
+			if tool.Parameters != nil {
+				if _, isObject := tool.Parameters.(map[string]any); !isObject {
+					return "function_parameters"
+				}
+			}
+		case "image_generation":
 			continue
 		case "namespace":
 			if !canFlattenNamespace(tool) {
 				return "namespace"
+			}
+			if unsupported := firstUnsupportedResponsesToolType(tool.Tools); unsupported != "" {
+				return unsupported
 			}
 		case "":
 			return "<empty>"
@@ -1182,6 +1207,9 @@ func firstUnsupportedResponsesToolType(tools []ResponsesTool) string {
 }
 
 func firstUnsupportedResponsesInputType(input *ResponsesInput) string {
+	if input != nil && len(input.Raw) > 0 {
+		return "native_shape"
+	}
 	if input == nil || len(input.Items) == 0 {
 		return ""
 	}
@@ -1724,49 +1752,14 @@ func generateItemID() string {
 	return fmt.Sprintf("item_%s", lo.RandomString(16, lo.AlphanumericCharset))
 }
 
-// validateReasoningEffort whitelists the values OpenAI's Responses API
-// accepts for `reasoning.effort`. Unknown inputs are dropped (empty
-// return) so the upstream schema validator never sees garbage; callers
-// fall back to the provider default.
-func validateReasoningEffort(effort string) string {
-	switch effort {
-	case "none", "minimal", "low", "medium", "high", "xhigh":
-		return effort
-	case "":
-		return ""
-	default:
-		return ""
-	}
-}
-
-// validateReasoningSummary whitelists the values OpenAI's Responses API
-// accepts for `reasoning.summary`. Unknown inputs are dropped.
-func validateReasoningSummary(summary string) string {
-	switch summary {
-	case "auto", "concise", "detailed":
-		return summary
-	case "":
-		return ""
-	default:
-		return ""
-	}
-}
-
-// responsesTerminalEvent picks the correct terminal stream event + status
-// pair based on the canonical FinishReason (see model/finishreason.go).
-// Length-truncated or paused turns map to response.incomplete; safety /
-// refusal / error-class stops map to response.failed; everything else is
-// the normal response.completed.
 func responsesTerminalEvent(finishReason string) (eventType string, status string) {
 	r := model.ParseFinishReason(finishReason)
 	switch {
 	case r.IsZero():
 		return "response.completed", "completed"
-	case r == model.FinishReasonLength || r == model.FinishReasonPauseTurn:
+	case r == model.FinishReasonLength || r == model.FinishReasonPauseTurn || r.IsSafetyBlock() && r != model.FinishReasonRefusal:
 		return "response.incomplete", "incomplete"
 	case r == model.FinishReasonError || r == model.FinishReasonMalformedCall:
-		return "response.failed", "failed"
-	case r.IsSafetyBlock():
 		return "response.failed", "failed"
 	default:
 		return "response.completed", "completed"

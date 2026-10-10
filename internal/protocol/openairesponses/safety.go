@@ -107,6 +107,11 @@ func ValidateContentExtensions(extensions *model.ProviderExtensions) error {
 				return err
 			}
 		}
+		if raw := native.Fields["stream_frame"]; len(raw) > 0 {
+			if err := validateAnthropicFrame(raw); err != nil {
+				return err
+			}
+		}
 		for _, key := range []string{"stream_events", "signature", "encrypted_content", "redacted_thinking", "server_tool_use", "context_management", "container", "mcp_servers"} {
 			if raw := native.Fields[key]; meaningfulJSON(raw) {
 				return fmt.Errorf("cannot convert Anthropic native field %q to Responses", key)
@@ -114,7 +119,7 @@ func ValidateContentExtensions(extensions *model.ProviderExtensions) error {
 		}
 		for key, raw := range native.Fields {
 			switch key {
-			case "content", "role", "cache_control", "system", "thinking", "metadata", "model", "max_tokens", "temperature", "top_p", "top_k", "stream", "stop_sequences", "tools", "tool_choice", "service_tier":
+			case "content", "role", "cache_control", "system", "thinking", "metadata", "model", "max_tokens", "temperature", "top_p", "top_k", "stream", "stop_sequences", "tools", "tool_choice", "service_tier", "stream_frame", "stream_frame_projection", "stream_frame_event", "stream_frame_id":
 				continue
 			}
 			if meaningfulJSON(raw) {
@@ -133,6 +138,45 @@ func ValidateContentExtensions(extensions *model.ProviderExtensions) error {
 				return fmt.Errorf("cannot convert Chat native field %q to Responses", key)
 			}
 		}
+	}
+	return nil
+}
+
+func validateAnthropicFrame(raw json.RawMessage) error {
+	var frame struct {
+		Type         string          `json:"type"`
+		ContentBlock json.RawMessage `json:"content_block"`
+		Delta        *struct {
+			Type string `json:"type"`
+		} `json:"delta"`
+		Message *struct {
+			Content json.RawMessage `json:"content"`
+		} `json:"message"`
+	}
+	if err := json.Unmarshal(raw, &frame); err != nil {
+		return err
+	}
+	switch frame.Type {
+	case "message_start":
+		if frame.Message != nil {
+			return validateAnthropicContent(frame.Message.Content)
+		}
+	case "content_block_start":
+		if meaningfulJSON(frame.ContentBlock) {
+			return validateAnthropicBlock(frame.ContentBlock)
+		}
+	case "content_block_delta":
+		if frame.Delta != nil {
+			switch frame.Delta.Type {
+			case "text_delta", "thinking_delta", "input_json_delta":
+				return nil
+			default:
+				return fmt.Errorf("cannot convert Anthropic delta %q to Responses", frame.Delta.Type)
+			}
+		}
+	case "message_delta", "message_stop", "content_block_stop", "ping", "error":
+	default:
+		return fmt.Errorf("cannot convert native Anthropic event %q to Responses", frame.Type)
 	}
 	return nil
 }

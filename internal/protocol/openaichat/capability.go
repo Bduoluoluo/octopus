@@ -22,16 +22,11 @@ func validateNativeItems(items []model.ProtocolItem) error {
 
 func validateNativeItem(format model.APIFormat, raw json.RawMessage) error {
 	var item struct {
-		Type             string          `json:"type"`
-		Signature        *string         `json:"signature"`
-		EncryptedContent *string         `json:"encrypted_content"`
-		Content          json.RawMessage `json:"content"`
+		Type    string          `json:"type"`
+		Content json.RawMessage `json:"content"`
 	}
 	if err := json.Unmarshal(raw, &item); err != nil {
 		return err
-	}
-	if item.Signature != nil && *item.Signature != "" || item.EncryptedContent != nil && *item.EncryptedContent != "" {
-		return fmt.Errorf("cannot represent opaque %s reasoning in Chat Completions", format)
 	}
 	switch format {
 	case model.APIFormatOpenAIResponse:
@@ -63,7 +58,7 @@ func validateNativeItem(format model.APIFormat, raw json.RawMessage) error {
 		}
 	case model.APIFormatAnthropicMessage:
 		switch item.Type {
-		case "text", "image", "tool_use", "tool_result", "thinking":
+		case "text", "image", "tool_use", "tool_result", "thinking", "redacted_thinking":
 		default:
 			return fmt.Errorf("cannot represent Anthropic %q block in Chat Completions", item.Type)
 		}
@@ -71,6 +66,67 @@ func validateNativeItem(format model.APIFormat, raw json.RawMessage) error {
 		return fmt.Errorf("cannot represent native %s content in Chat Completions", format)
 	}
 	return nil
+}
+
+func preserveReasoningItems(fields model.ProtocolFields, extension *model.ProviderExtensions, raw json.RawMessage) (model.ProtocolFields, error) {
+	var items []model.ProtocolItem
+	if extension != nil {
+		if extension.OpenAIResponses != nil && len(raw) == 0 {
+			items = append(items, extension.OpenAIResponses.Items...)
+		}
+		if extension.Anthropic != nil {
+			items = append(items, extension.Anthropic.Items...)
+		}
+	}
+	if len(raw) > 0 {
+		var output []json.RawMessage
+		if err := json.Unmarshal(raw, &output); err != nil {
+			return nil, err
+		}
+		for position, item := range output {
+			items = append(items, model.ProtocolItem{Format: model.APIFormatOpenAIResponse, Position: position, Raw: item})
+		}
+	}
+	var reasoning []model.ProtocolItem
+	for _, item := range items {
+		var kind struct {
+			Type string `json:"type"`
+		}
+		if err := json.Unmarshal(item.Raw, &kind); err != nil {
+			return nil, err
+		}
+		if kind.Type == "reasoning" || kind.Type == "thinking" || kind.Type == "redacted_thinking" {
+			reasoning = append(reasoning, item)
+		}
+	}
+	if len(reasoning) == 0 {
+		return fields, nil
+	}
+	encoded, err := json.Marshal(reasoning)
+	if err != nil {
+		return nil, err
+	}
+	result := make(model.ProtocolFields, len(fields)+1)
+	for key, value := range fields {
+		result[key] = value
+	}
+	result["reasoning_items"] = encoded
+	return result, nil
+}
+
+func preserveForeignSignature(message *Message) {
+	if message == nil || message.ReasoningSignature == nil {
+		return
+	}
+	fields := make(model.ProtocolFields, len(message.Fields)+1)
+	for key, value := range message.Fields {
+		fields[key] = value
+	}
+	fields["reasoning_metadata"], _ = json.Marshal(struct {
+		Signature string `json:"signature"`
+	}{Signature: *message.ReasoningSignature})
+	message.Fields = fields
+	message.ReasoningSignature = nil
 }
 
 func validateExtensions(extension *model.ProviderExtensions) error {

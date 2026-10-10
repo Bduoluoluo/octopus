@@ -101,7 +101,7 @@ func (inbound *ResponseInbound) nativeStreamFrames(events []model.StreamEvent) (
 			}
 			fields["response"], _ = json.Marshal(response)
 		}
-		if strings.HasPrefix(eventType, "response.") && (strings.HasSuffix(eventType, ".completed") || strings.HasSuffix(eventType, ".failed") || strings.HasSuffix(eventType, ".incomplete") || strings.HasSuffix(eventType, ".cancelled")) {
+		if eventType == "response.done" || strings.HasPrefix(eventType, "response.") && (strings.HasSuffix(eventType, ".completed") || strings.HasSuffix(eventType, ".failed") || strings.HasSuffix(eventType, ".incomplete") || strings.HasSuffix(eventType, ".cancelled")) {
 			inbound.responseCompleted = true
 		}
 		body, err := json.Marshal(fields)

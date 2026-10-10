@@ -9,6 +9,9 @@ import (
 )
 
 func validateResponsesRequest(request *model.InternalLLMRequest) error {
+	if request.RawAPIFormat == model.APIFormatOpenAIResponse && request.ProviderExtensions != nil && request.ProviderExtensions.OpenAIResponses != nil {
+		return nil
+	}
 	if request.N != nil && *request.N != 1 {
 		return fmt.Errorf("responses protocol does not support n=%d", *request.N)
 	}
@@ -63,6 +66,19 @@ func attachResponseRequestFields(result *ResponsesRequest, request *model.Intern
 	}
 	extension := request.ProviderExtensions.OpenAIResponses
 	result.Fields = extension.Fields
+	if len(request.OpenAIRawInputItems()) == 0 {
+		if raw, present := extension.Fields["input"]; present {
+			var original ResponsesInput
+			if err := json.Unmarshal(raw, &original); err != nil {
+				return err
+			}
+			if len(original.Raw) > 0 || original.Text == nil && len(original.Items) == 0 {
+				result.Input = ResponsesInput{Raw: append(json.RawMessage(nil), raw...)}
+			}
+		} else {
+			result.Input = ResponsesInput{}
+		}
+	}
 	if raw := extension.Fields["tools"]; len(raw) > 0 {
 		var tools []ResponsesTool
 		if err := json.Unmarshal(raw, &tools); err != nil {
@@ -76,6 +92,17 @@ func attachResponseRequestFields(result *ResponsesRequest, request *model.Intern
 			return err
 		}
 		result.ToolChoice = &choice
+	}
+	if raw := extension.Fields["reasoning"]; len(raw) > 0 && string(raw) != "null" {
+		var reasoning wire.Reasoning
+		if err := json.Unmarshal(raw, &reasoning); err != nil {
+			return err
+		}
+		if result.Reasoning == nil {
+			result.Reasoning = &wire.Reasoning{}
+		}
+		result.Reasoning.Context = reasoning.Context
+		result.Reasoning.Fields = reasoning.Fields
 	}
 	if len(request.OpenAIRawInputItems()) > 0 {
 		if raw := extension.Fields["instructions"]; len(raw) > 0 {

@@ -415,6 +415,9 @@ func (r *InternalLLMRequest) Validate() error {
 	// 检查是否是 embedding 请求
 	isEmbeddingRequest := r.EmbeddingInput != nil
 	isChatRequest := r.IsChatRequest()
+	if !isEmbeddingRequest && !isChatRequest && r.RawAPIFormat == APIFormatOpenAIResponse && r.HasOpenAIResponsesPassthrough() && r.ProviderExtensions != nil && r.ProviderExtensions.OpenAIResponses != nil && r.ProviderExtensions.OpenAIResponses.Fields != nil {
+		return nil
+	}
 
 	if isEmbeddingRequest && isChatRequest {
 		return errors.New("cannot specify both messages and input")

@@ -1,6 +1,7 @@
 package anthropic
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 
@@ -331,8 +332,12 @@ func (c MessageContent) MarshalJSON() ([]byte, error) {
 
 func (c *MessageContent) UnmarshalJSON(data []byte) error {
 	*c = MessageContent{}
-	if string(data) == "null" {
-		return fmt.Errorf("content cannot be null")
+	if !json.Valid(data) {
+		return fmt.Errorf("invalid content JSON")
+	}
+	if string(bytes.TrimSpace(data)) == "null" {
+		c.Raw = append(json.RawMessage(nil), data...)
+		return nil
 	}
 
 	var blocks []MessageContentBlock
@@ -362,7 +367,8 @@ func (c *MessageContent) UnmarshalJSON(data []byte) error {
 		return nil
 	}
 
-	return fmt.Errorf("invalid content type")
+	c.Raw = append(json.RawMessage(nil), data...)
+	return nil
 }
 
 // MessageContentBlock represents different types of content blocks.

@@ -45,11 +45,25 @@ func TestCitationUnionRoundTrip(t *testing.T) {
 	}
 }
 
-func TestCitationUnionRejectsWrongShapes(t *testing.T) {
-	for _, fixture := range []string{`{"type":"document","citations":[]}`, `{"type":"text","citations":{"enabled":true}}`, `{"type":"text","citations":false}`, `{"type":"document","citations":42}`} {
+func TestCitationUnionPreservesProviderSpecificShapes(t *testing.T) {
+	for _, fixture := range []string{`{"type":"document","citations":[]}`, `{"type":"text","citations":{"enabled":true}}`, `{"type":"text","citations":false}`, `{"type":"document","citations":42}`, `{"type":"document","citations":{"enabled":"auto","future":0}}`} {
 		var block MessageContentBlock
-		if err := json.Unmarshal([]byte(fixture), &block); err == nil {
-			t.Fatalf("accepted invalid block: %s", fixture)
+		if err := json.Unmarshal([]byte(fixture), &block); err != nil {
+			t.Fatal(err)
+		}
+		encoded, err := json.Marshal(block)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var expected, actual any
+		if err := json.Unmarshal([]byte(fixture), &expected); err != nil {
+			t.Fatal(err)
+		}
+		if err := json.Unmarshal(encoded, &actual); err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(expected, actual) {
+			t.Fatalf("citation extension changed: %s -> %s", fixture, encoded)
 		}
 	}
 }

@@ -68,9 +68,11 @@ No transport, routing, key, retry or sticky implementation belongs here.
 
 ## Expected differences and integration notes
 
-- String error codes and integer-valued float timestamps now decode.
+- String error codes and provider timestamp variants decode; timestamp metadata
+  remains preserved in the native response even when its IR projection is zero.
 - Final-only text/tool arguments are emitted; matching done snapshots do not
-  repeat streamed deltas. Conflicting snapshots are errors.
+  repeat streamed deltas. Corrected final snapshots update logs/replay and native
+  output without concatenating replacements onto previously delivered deltas.
 - SSE contains explicit event lines; old tests' SSE parser now validates
   agreement between event and data type.
 - Tool start is emitted once; the former duplicate-start assertion is updated
@@ -92,3 +94,16 @@ Validation commands and their actual final outcomes are reported by the
 integrating task. This source note does not claim completion of tests not run.
 Rollback is by reverting the eventual integration commit(s), including facade
 aliases and shared IR dependencies; do not reset an unrelated dirty worktree.
+
+## Octopus compatibility follow-up
+
+Native tool parameter schemas, tool choices, reasoning options, raw-only input
+variants and prompt-based requests are passed through to Responses upstreams.
+Missing optional stream item/part metadata and response.done do not invalidate
+an otherwise completed response. Refusal is normal output; content filtering is
+represented as incomplete rather than an invented upstream failure. Actual
+error events, malformed outer JSON and unconfirmed EOF remain failures.
+
+Regression fixtures are in permissive_fields_test.go, stream_compatibility_test.go,
+snapshot_metadata_test.go, and the relay protocol compatibility tests. Shared
+behavior and retained boundaries are documented in ../COMPATIBILITY.md.

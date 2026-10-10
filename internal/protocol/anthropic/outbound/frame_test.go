@@ -54,7 +54,7 @@ func TestFrameParallelToolsAndTerminal(t *testing.T) {
 }
 
 func TestFrameEndRejectsMissingTerminalAndRetainsErrors(t *testing.T) {
-	for _, frame := range []string{`[DONE]`, `{"type":"message_delta","delta":{"stop_reason":"end_turn"}}`, `{"type":"error","error":{"type":"overloaded_error","message":"busy"}}`, `{`} {
+	for _, frame := range []string{`{"type":"message_start","message":{"id":"unfinished"}}`, `{"type":"error","error":{"type":"overloaded_error","message":"busy"}}`, `{`} {
 		codec := &MessageOutbound{}
 		_, _ = codec.TransformStreamFrame(context.Background(), model.StreamFrame{Data: []byte(frame)})
 		if _, err := codec.EndStream(context.Background()); err == nil {
@@ -62,8 +62,17 @@ func TestFrameEndRejectsMissingTerminalAndRetainsErrors(t *testing.T) {
 		}
 	}
 	codec := &MessageOutbound{}
-	if _, err := codec.TransformStreamFrame(context.Background(), model.StreamFrame{Event: "message_stop", Data: []byte(`{"type":"message_delta"}`)}); err == nil {
-		t.Fatal("SSE event/data mismatch accepted")
+	if _, err := codec.TransformStreamFrame(context.Background(), model.StreamFrame{Event: "message_stop", Data: []byte(`{"type":"message_delta"}`)}); err != nil {
+		t.Fatalf("SSE event/data mismatch rejected: %v", err)
+	}
+	for _, frame := range []string{`[DONE]`, `{"type":"message_delta","delta":{"stop_reason":"end_turn"}}`} {
+		codec := &MessageOutbound{}
+		if _, err := codec.TransformStreamFrame(context.Background(), model.StreamFrame{Data: []byte(frame)}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := codec.EndStream(context.Background()); err != nil {
+			t.Fatalf("completed stream rejected: %s: %v", frame, err)
+		}
 	}
 }
 

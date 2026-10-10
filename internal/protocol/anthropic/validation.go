@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/xuanli27/octopus/internal/transformer/model"
 )
@@ -148,9 +147,17 @@ func validateResponsesContent(raw json.RawMessage) error {
 		switch part.Type {
 		case "input_text", "output_text", "text":
 			if meaningfulRaw(part.Annotations) && !bytes.Equal(bytes.TrimSpace(part.Annotations), []byte("[]")) {
-				return fmt.Errorf("Anthropic cannot convert generic Responses annotations losslessly")
+				var citations []model.ContentCitation
+				if err := json.Unmarshal(part.Annotations, &citations); err != nil {
+					return err
+				}
+				for _, citation := range citations {
+					if _, err := ConvertCitation(citation); err != nil {
+						return err
+					}
+				}
 			}
-		case "input_image":
+		case "input_image", "refusal":
 		default:
 			return fmt.Errorf("Anthropic cannot represent Responses content %q", part.Type)
 		}
@@ -186,6 +193,8 @@ func validateResponsesFrame(raw json.RawMessage) error {
 		}
 	}
 	switch frame.Type {
+	case "response.refusal.delta", "response.refusal.done", "response.output_text.annotation.added":
+		return nil
 	case "response.created", "response.in_progress", "response.queued", "response.metadata", "response.completed", "response.failed", "response.incomplete", "response.cancelled", "response.canceled", "error", "response.output_item.added", "response.output_item.done", "response.content_part.added", "response.content_part.done", "response.output_text.delta", "response.output_text.done", "response.function_call_arguments.delta", "response.function_call_arguments.done", "response.reasoning_summary_text.delta", "response.reasoning_summary_text.done", "response.reasoning_text.delta", "response.reasoning_text.done":
 		return nil
 	}
@@ -227,11 +236,10 @@ func ValidateMessage(message *model.Message, response bool) error {
 	if message.Audio != nil || len(message.Images) > 0 {
 		return fmt.Errorf("Anthropic cannot represent Chat audio or generated images")
 	}
-	if len(message.Annotations) > 0 {
-		return fmt.Errorf("Anthropic cannot convert generic annotations without source locations")
-	}
-	if message.Refusal != "" {
-		return fmt.Errorf("Anthropic cannot encode a typed refusal as ordinary text")
+	for _, annotation := range message.Annotations {
+		if _, err := AnnotationCitation(annotation); err != nil {
+			return err
+		}
 	}
 	foreign := message.ProviderExtensions != nil && (message.ProviderExtensions.OpenAIResponses != nil || message.ProviderExtensions.OpenAIChat != nil)
 	for _, block := range message.ReasoningBlocks {
@@ -251,6 +259,13 @@ func ValidateMessage(message *model.Message, response bool) error {
 		}
 	}
 	for _, part := range message.Content.MultipleContent {
+		if !native && part.Native == nil {
+			for _, citation := range part.Citations {
+				if _, err := ConvertCitation(citation); err != nil {
+					return err
+				}
+			}
+		}
 		if err := ValidateExtensions(part.ProviderExtensions); err != nil {
 			return err
 		}
@@ -384,10 +399,8 @@ func ValidateStreamEvent(event model.StreamEvent, foreign bool) error {
 		}
 	}
 	if event.Citation != nil && (foreign || ForeignStream(event)) {
-		switch strings.TrimSpace(event.Citation.Type) {
-		case "char_location", "page_location", "content_block_location", "search_result_location", "web_search_result_location":
-		default:
-			return fmt.Errorf("Anthropic cannot represent citation type %q", event.Citation.Type)
+		if _, err := ConvertCitation(*event.Citation); err != nil {
+			return err
 		}
 	}
 	return nil

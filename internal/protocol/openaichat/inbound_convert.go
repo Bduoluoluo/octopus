@@ -146,14 +146,16 @@ func (t *ToolChoice) ToLLMToolChoice() *model.ToolChoice {
 // ToLLMMessage converts OpenAI Message to unified model.Message.
 func (m Message) ToLLMMessage() model.Message {
 	msg := model.Message{
-		ProviderExtensions: chatExtensions(m.Fields),
-		ReasoningSignature: m.ReasoningSignature,
-		Role:               m.Role,
-		Name:               m.Name,
-		Refusal:            m.Refusal,
-		ToolCallID:         m.ToolCallID,
-		ReasoningContent:   m.ReasoningContent,
-		Reasoning:          m.Reasoning,
+		ProviderExtensions:     chatExtensions(m.Fields),
+		ReasoningSignature:     m.ReasoningSignature,
+		RedactedThinkingBlocks: m.RedactedThinkingBlocks,
+		ReasoningBlocks:        m.ReasoningBlocks,
+		Role:                   m.Role,
+		Name:                   m.Name,
+		Refusal:                m.Refusal,
+		ToolCallID:             m.ToolCallID,
+		ReasoningContent:       m.ReasoningContent,
+		Reasoning:              m.Reasoning,
 	}
 
 	if m.Audio != nil {
@@ -199,6 +201,9 @@ func (m Message) ToLLMMessage() model.Message {
 			return a.ToLLMAnnotation()
 		})
 	}
+	if msg.ReasoningSignature != nil && msg.ProviderExtensions == nil {
+		msg.ProviderExtensions = &model.ProviderExtensions{OpenAIChat: &model.ProtocolExtension{}}
+	}
 
 	return msg
 }
@@ -242,6 +247,7 @@ func (c MessageContent) ToLLMContent() model.MessageContent {
 func (p MessageContentPart) ToLLMPart() model.MessageContentPart {
 	part := model.MessageContentPart{
 		ProviderExtensions: chatExtensions(p.Fields),
+		Citations:          p.Citations,
 		Type:               p.Type,
 		Text:               p.Text,
 	}

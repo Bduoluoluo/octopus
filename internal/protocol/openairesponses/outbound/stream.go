@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"reflect"
 	"sort"
 	"strings"
 
@@ -22,6 +21,7 @@ type responseFrameState struct {
 	items       map[int]*responseItemState
 	itemIndexes map[string]int
 	usage       *model.Usage
+	corrected   bool
 }
 
 type responseItemState struct {
@@ -150,14 +150,14 @@ func (outbound *ResponseOutbound) TransformStreamFrame(ctx context.Context, fram
 	case "response.created", "response.in_progress", "response.queued", "response.metadata", "response.reasoning.done":
 	case "response.output_item.added", "response.output_item.done":
 		if event.Item == nil {
-			return nil, fmt.Errorf("%s missing item", event.Type)
+			break
 		}
 		if err := outbound.consumeItem(index, *event.Item, event.Type == "response.output_item.done", base, &events); err != nil {
 			return nil, err
 		}
 	case "response.content_part.added", "response.content_part.done":
 		if event.Part == nil {
-			return nil, fmt.Errorf("%s missing part", event.Type)
+			break
 		}
 		kind := model.StreamEventKindContentBlockStart
 		if event.Type == "response.content_part.done" {
@@ -195,7 +195,7 @@ func (outbound *ResponseOutbound) TransformStreamFrame(ctx context.Context, fram
 		}
 	case "response.reasoning_summary_part.added", "response.reasoning_summary_part.done":
 		if event.Part == nil {
-			return nil, fmt.Errorf("%s missing part", event.Type)
+			break
 		}
 		if err := outbound.consumeText(index, event.SummaryIndex, "reasoning", stringValue(event.Part.Text), true, base, &events); err != nil {
 			return nil, err
@@ -263,10 +263,7 @@ func (outbound *ResponseOutbound) TransformStreamFrame(ctx context.Context, fram
 		if err := outbound.consumeCitation(index, event.ContentIndex, annotation.Annotation, base, &events); err != nil {
 			return nil, err
 		}
-	case "response.completed", "response.incomplete", "response.failed", "response.cancelled", "response.canceled", "error":
-		if event.Type == "response.completed" && event.Response == nil {
-			return nil, fmt.Errorf("%s missing response", event.Type)
-		}
+	case "response.completed", "response.done", "response.incomplete", "response.failed", "response.cancelled", "response.canceled", "error":
 		if event.Response != nil {
 			for outputIndex, output := range event.Response.Output {
 				if err := outbound.consumeItem(outputIndex, output, true, base, &events); err != nil {
@@ -303,10 +300,16 @@ func (outbound *ResponseOutbound) TransformStreamFrame(ctx context.Context, fram
 		}
 		state.terminal = true
 		status := strings.TrimPrefix(event.Type, "response.")
+		if status == "done" {
+			status = "completed"
+		}
 		if event.Response != nil && event.Response.Status != nil {
 			status = *event.Response.Status
 		}
 		detail := event.Error
+		if detail != nil && len(detail.Fields) == 0 && detail.Code == "" && detail.Type == "" && detail.Message == "" && detail.Param == "" {
+			detail = nil
+		}
 		if event.Response != nil && event.Response.Error != nil {
 			detail = event.Response.Error
 		}
@@ -337,7 +340,27 @@ func (outbound *ResponseOutbound) TransformStreamFrame(ctx context.Context, fram
 		if err != nil {
 			return nil, err
 		}
+		if event.Response != nil && len(event.Response.Output) > 0 {
+			output := make([]wire.Item, len(event.Response.Output))
+			for position := range output {
+				output[position] = outbound.outputItems[position]
+			}
+			raw, err = json.Marshal(output)
+			if err != nil {
+				return nil, err
+			}
+		}
 		stop.ProviderExtensions = &model.ProviderExtensions{OpenAI: &model.OpenAIExtension{RawResponseItems: raw}}
+		if state.corrected || event.Response != nil && len(event.Response.Output) > 0 {
+			var output []wire.Item
+			if err := json.Unmarshal(raw, &output); err != nil {
+				return nil, err
+			}
+			snapshot := convertToLLMResponseFromResponses(&ResponsesResponse{Output: output})
+			if len(snapshot.Choices) > 0 {
+				stop.Message = snapshot.Choices[0].Message
+			}
+		}
 		if state.usage != nil {
 			usage := emit(model.StreamEventKindUsageDelta)
 			usage.Usage = state.usage
@@ -392,7 +415,7 @@ func (outbound *ResponseOutbound) TransformStreamFrame(ctx context.Context, fram
 func (outbound *ResponseOutbound) consumeArguments(index int, value string, done bool, base model.StreamEvent, events *[]model.StreamEvent) error {
 	state := outbound.frameState.items[index]
 	if state.stopped && !done {
-		return fmt.Errorf("arguments received after item %d closed", index)
+		state.stopped = false
 	}
 	tool := model.ToolCall{Index: outbound.toolCallIndexFor(index), ID: state.item.CallID, Type: "function", Function: model.FunctionCall{Name: state.item.Name}}
 	if state.item.Type == "custom_tool_call" {
@@ -410,11 +433,7 @@ func (outbound *ResponseOutbound) consumeArguments(index int, value string, done
 	}
 	delta := value
 	if done {
-		var err error
-		delta, err = missingSuffix(state.arguments, value, state.item.Type == "function_call")
-		if err != nil {
-			return fmt.Errorf("tool %q: %w", state.item.CallID, err)
-		}
+		delta = outbound.snapshotSuffix(state.arguments, value)
 	} else {
 		state.arguments += value
 	}
@@ -440,24 +459,15 @@ func (outbound *ResponseOutbound) consumeArguments(index int, value string, done
 	return nil
 }
 
-func missingSuffix(previous, final string, compareJSON bool) (string, error) {
+func (outbound *ResponseOutbound) snapshotSuffix(previous, final string) string {
 	if final == "" {
-		return "", nil
+		return ""
 	}
 	if strings.HasPrefix(final, previous) {
-		return strings.TrimPrefix(final, previous), nil
+		return strings.TrimPrefix(final, previous)
 	}
-	if compareJSON {
-		var left, right any
-		first := json.NewDecoder(strings.NewReader(previous))
-		first.UseNumber()
-		second := json.NewDecoder(strings.NewReader(final))
-		second.UseNumber()
-		if first.Decode(&left) == nil && second.Decode(&right) == nil && reflect.DeepEqual(left, right) {
-			return "", nil
-		}
-	}
-	return "", fmt.Errorf("final content disagrees with streamed content")
+	outbound.frameState.corrected = true
+	return ""
 }
 
 func (outbound *ResponseOutbound) consumeText(index int, contentIndex *int, kind, value string, done bool, base model.StreamEvent, events *[]model.StreamEvent) error {
@@ -469,11 +479,7 @@ func (outbound *ResponseOutbound) consumeText(index int, contentIndex *int, kind
 	key := fmt.Sprintf("%s:%d", kind, position)
 	delta := value
 	if done {
-		var err error
-		delta, err = missingSuffix(state.text[key], value, false)
-		if err != nil {
-			return err
-		}
+		delta = outbound.snapshotSuffix(state.text[key], value)
 		if value != "" {
 			state.text[key] = value
 		}
@@ -658,7 +664,22 @@ func (outbound *ResponseOutbound) consumeCitation(index int, contentIndex *int, 
 		state.item.Content.Items = append(state.item.Content.Items, wire.Item{Type: "output_text"})
 	}
 	part := &state.item.Content.Items[position]
-	part.Annotations = append(part.Annotations, wire.Annotation{Type: citation.Type, URL: citation.URL, Title: citation.Title, StartIndex: citation.StartIndex, EndIndex: citation.EndIndex, Fields: citation.Fields})
+	annotation := wire.Annotation{Type: citation.Type, URL: citation.URL, Title: citation.Title, StartIndex: citation.StartIndex, EndIndex: citation.EndIndex, Fields: citation.Fields}
+	encoded, err := json.Marshal(annotation)
+	if err != nil {
+		return err
+	}
+	for _, existing := range part.Annotations {
+		previous, err := json.Marshal(existing)
+		if err != nil {
+			return err
+		}
+		if bytes.Equal(previous, encoded) {
+			outbound.outputItems[index] = state.item
+			return nil
+		}
+	}
+	part.Annotations = append(part.Annotations, annotation)
 	outbound.outputItems[index] = state.item
 	return nil
 }

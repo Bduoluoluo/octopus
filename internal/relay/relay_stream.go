@@ -1,6 +1,7 @@
 package relay
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -22,11 +23,7 @@ func (ra *relayAttempt) handleStreamResponseV2(ctx context.Context, response *ht
 	defer ra.closeFirstTokenBudget()
 	defer ra.closeProtocolStream(&resultErr)
 
-	// Content-Type validation
-	if ct := response.Header.Get("Content-Type"); ct != "" && !strings.Contains(strings.ToLower(ct), "text/event-stream") {
-		body, _ := io.ReadAll(io.LimitReader(response.Body, 16*1024))
-		return fmt.Errorf("upstream returned non-SSE content-type %q for stream request: %s", ct, string(body))
-	}
+	response.Body = compatibleStreamBody(response)
 
 	// Hand off early heartbeat
 	ra.heartbeat.Hand()
@@ -85,11 +82,7 @@ func (ra *relayAttempt) handleStreamResponsePassthroughV2(ctx context.Context, r
 	defer ra.closeFirstTokenBudget()
 	defer ra.closeProtocolStream(&resultErr)
 
-	// Content-Type validation
-	if ct := response.Header.Get("Content-Type"); ct != "" && !strings.Contains(strings.ToLower(ct), "text/event-stream") {
-		body, _ := io.ReadAll(io.LimitReader(response.Body, 16*1024))
-		return fmt.Errorf("upstream returned non-SSE content-type %q for stream request: %s", ct, string(body))
-	}
+	response.Body = compatibleStreamBody(response)
 
 	// Hand off early heartbeat
 	ra.heartbeat.Hand()
@@ -399,6 +392,7 @@ func (ra *relayAttempt) collectResponse() {
 var (
 	responsesPassthroughTerminalEvents = map[string]struct{}{
 		"response.completed":  {},
+		"response.done":       {},
 		"response.failed":     {},
 		"response.incomplete": {},
 		"error":               {},
@@ -408,6 +402,52 @@ var (
 		"error":        {},
 	}
 )
+
+type sniffedStreamBody struct {
+	io.Closer
+	reader      io.Reader
+	contentType string
+	checked     bool
+}
+
+func compatibleStreamBody(response *http.Response) io.ReadCloser {
+	contentType := response.Header.Get("Content-Type")
+	if contentType == "" || strings.Contains(strings.ToLower(contentType), "text/event-stream") {
+		return response.Body
+	}
+	return &sniffedStreamBody{Closer: response.Body, reader: response.Body, contentType: contentType}
+}
+
+func (body *sniffedStreamBody) Read(buffer []byte) (int, error) {
+	if !body.checked {
+		if err := body.sniff(); err != nil {
+			return 0, err
+		}
+	}
+	return body.reader.Read(buffer)
+}
+
+func (body *sniffedStreamBody) sniff() error {
+	reader := bufio.NewReaderSize(body.reader, 512)
+	var prefix []byte
+	for len(prefix) < 512 {
+		line, err := reader.ReadSlice('\n')
+		prefix = append(prefix, line...)
+		trimmed := bytes.TrimSpace(line)
+		if bytes.HasPrefix(trimmed, []byte(":")) || bytes.HasPrefix(trimmed, []byte("data:")) || bytes.HasPrefix(trimmed, []byte("event:")) || bytes.HasPrefix(trimmed, []byte("id:")) || bytes.HasPrefix(trimmed, []byte("retry:")) {
+			body.reader = io.MultiReader(bytes.NewReader(prefix), reader)
+			body.checked = true
+			return nil
+		}
+		if len(trimmed) > 0 || err != nil {
+			break
+		}
+	}
+	if err := upstreamPayloadError(prefix, ""); err != nil {
+		return err
+	}
+	return fmt.Errorf("upstream returned non-SSE content-type %q for stream request: %s", body.contentType, string(prefix))
+}
 
 // streamReachedTerminalEvent 报告缓存的原始 SSE 流是否已包含协议终态事件。
 // 客户端 SDK 收到终态事件后会立即断连而不等上游 EOF，断连取消会沿出站请求

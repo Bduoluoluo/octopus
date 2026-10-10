@@ -2,6 +2,7 @@ package outbound
 
 import (
 	"encoding/json"
+	"strings"
 
 	"github.com/samber/lo"
 	"github.com/xuanli27/octopus/internal/transformer/model"
@@ -12,7 +13,10 @@ func enrichResponseItems(result *model.InternalLLMResponse, response *ResponsesR
 		return
 	}
 	message := result.Choices[0].Message
+	message.ToolCalls = nil
+	message.ReasoningBlocks = nil
 	var annotated []model.MessageContentPart
+	var reasoningText, signatures strings.Builder
 	for position, item := range response.Output {
 		encoded, err := json.Marshal(item)
 		if err != nil {
@@ -34,10 +38,9 @@ func enrichResponseItems(result *model.InternalLLMResponse, response *ResponsesR
 				}
 			}
 			if reasoning != "" || signature != "" {
-				message.AppendReasoningBlock(model.ReasoningBlock{Kind: model.ReasoningBlockKindThinking, Index: position, Text: reasoning, Signature: signature})
-				if signature != "" {
-					message.ReasoningSignature = &signature
-				}
+				message.AppendReasoningBlock(model.ReasoningBlock{Kind: model.ReasoningBlockKindThinking, Index: position, Text: reasoning, Signature: signature, Provider: "openai"})
+				reasoningText.WriteString(reasoning)
+				signatures.WriteString(signature)
 			}
 		case "message":
 			if item.Content == nil {
@@ -47,31 +50,29 @@ func enrichResponseItems(result *model.InternalLLMResponse, response *ResponsesR
 				if content.Type != "output_text" {
 					continue
 				}
-				part := model.MessageContentPart{Type: "text", Text: content.Text}
-				for _, annotation := range content.Annotations {
-					citation := model.ContentCitation{Type: annotation.Type, URL: annotation.URL, Title: annotation.Title, StartIndex: annotation.StartIndex, EndIndex: annotation.EndIndex, Fields: annotation.Fields}
-					if annotation.URLCitation != nil {
-						citation.URL = &annotation.URLCitation.URL
-						citation.Title = &annotation.URLCitation.Title
-					}
-					part.Citations = append(part.Citations, citation)
-				}
-				annotated = append(annotated, part)
+				annotated = append(annotated, responseOutputTextPart(content))
 			}
-		case "function_call":
-			for index := range message.ToolCalls {
-				if message.ToolCalls[index].ID != item.CallID {
-					continue
-				}
-				fields := model.ProtocolFields{}
-				fields["namespace"], _ = json.Marshal(item.Namespace)
-				fields["item_id"], _ = json.Marshal(item.ID)
-				message.ToolCalls[index].ProviderExtensions = &model.ProviderExtensions{OpenAIResponses: &model.ProtocolExtension{Fields: fields}}
+		case "output_text":
+			annotated = append(annotated, responseOutputTextPart(item))
+		case "function_call", "custom_tool_call":
+			kind, arguments := "function", item.Arguments
+			fields := model.ProtocolFields{}
+			fields["namespace"], _ = json.Marshal(item.Namespace)
+			fields["item_id"], _ = json.Marshal(item.ID)
+			if item.Type == "custom_tool_call" {
+				kind, arguments = "custom", lo.FromPtr(item.Input)
+				fields["raw"] = encoded
 			}
-		case "custom_tool_call":
-			fields := model.ProtocolFields{"raw": encoded}
-			message.ToolCalls = append(message.ToolCalls, model.ToolCall{ID: item.CallID, Type: "custom", Function: model.FunctionCall{Name: item.Name, Arguments: lo.FromPtr(item.Input)}, ProviderExtensions: &model.ProviderExtensions{OpenAIResponses: &model.ProtocolExtension{Fields: fields}}})
+			message.ToolCalls = append(message.ToolCalls, model.ToolCall{Index: len(message.ToolCalls), ID: item.CallID, Type: kind, Function: model.FunctionCall{Name: item.Name, Arguments: arguments}, ProviderExtensions: &model.ProviderExtensions{OpenAIResponses: &model.ProtocolExtension{Fields: fields}}})
 		}
+	}
+	message.ReasoningContent = nil
+	message.ReasoningSignature = nil
+	if reasoningText.Len() > 0 {
+		message.ReasoningContent = lo.ToPtr(reasoningText.String())
+	}
+	if signatures.Len() > 0 {
+		message.ReasoningSignature = lo.ToPtr(signatures.String())
 	}
 	hasCitation := false
 	for _, part := range annotated {
@@ -80,6 +81,11 @@ func enrichResponseItems(result *model.InternalLLMResponse, response *ResponsesR
 		}
 	}
 	if hasCitation {
+		for _, part := range message.Content.MultipleContent {
+			if part.Type != "text" {
+				annotated = append(annotated, part)
+			}
+		}
 		message.Content = model.MessageContent{MultipleContent: annotated}
 	}
 	if len(message.ToolCalls) > 0 {
@@ -97,4 +103,17 @@ func enrichResponseItems(result *model.InternalLLMResponse, response *ResponsesR
 	} else if response.Status != nil && (*response.Status == "failed" || *response.Status == "cancelled" || *response.Status == "canceled") {
 		result.Error = &model.ResponseError{Detail: model.ErrorDetail{Type: "upstream_error", Message: "upstream response " + *response.Status}}
 	}
+}
+
+func responseOutputTextPart(content ResponsesItem) model.MessageContentPart {
+	part := model.MessageContentPart{Type: "text", Text: content.Text}
+	for _, annotation := range content.Annotations {
+		citation := model.ContentCitation{Type: annotation.Type, URL: annotation.URL, Title: annotation.Title, StartIndex: annotation.StartIndex, EndIndex: annotation.EndIndex, Fields: annotation.Fields}
+		if annotation.URLCitation != nil {
+			citation.URL = &annotation.URLCitation.URL
+			citation.Title = &annotation.URLCitation.Title
+		}
+		part.Citations = append(part.Citations, citation)
+	}
+	return part
 }

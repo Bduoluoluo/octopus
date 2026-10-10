@@ -23,6 +23,17 @@ func (o *MessageOutbound) TransformStreamFrame(ctx context.Context, frame model.
 	if err != nil {
 		o.streamError = err
 	}
+	if err == nil && len(events) > 0 && json.Valid(frame.Data) {
+		for index := range events {
+			fields := model.ProtocolFields{"stream_frame_projection": json.RawMessage("true")}
+			if index == 0 {
+				fields["stream_frame"] = append(json.RawMessage(nil), frame.Data...)
+				fields["stream_frame_event"], _ = json.Marshal(frame.Event)
+				fields["stream_frame_id"], _ = json.Marshal(frame.ID)
+			}
+			events[index].ProviderExtensions = &model.ProviderExtensions{Anthropic: &model.AnthropicExtension{Fields: fields}}
+		}
+	}
 	return events, err
 }
 
@@ -37,12 +48,10 @@ func (o *MessageOutbound) transformFrame(ctx context.Context, frame model.Stream
 		return nil, o.streamError
 	}
 	if len(bytes.TrimSpace(frame.Data)) == 0 {
-		if frame.Event == "" || frame.Event == "ping" {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("Anthropic %s frame has no data", frame.Event)
+		return nil, nil
 	}
 	if bytes.Equal(bytes.TrimSpace(frame.Data), []byte("[DONE]")) {
+		o.terminal = true
 		return []model.StreamEvent{{Kind: model.StreamEventKindDone}}, nil
 	}
 	var event wire.StreamEvent
@@ -52,14 +61,11 @@ func (o *MessageOutbound) transformFrame(ctx context.Context, frame model.Stream
 	if event.Type == "" {
 		event.Type = frame.Event
 	}
-	if frame.Event != "" && event.Type != frame.Event {
-		return nil, fmt.Errorf("Anthropic SSE event %q conflicts with data type %q", frame.Event, event.Type)
+	if frame.Event == "error" || (event.Error != nil && (event.Error.Type != "" || event.Error.Message != "")) {
+		event.Type = "error"
 	}
 	if event.Type == "ping" {
 		return nil, nil
-	}
-	if o.terminal {
-		return nil, fmt.Errorf("Anthropic event %s after message_stop", event.Type)
 	}
 	if !o.initialized {
 		o.blocks = make(map[int]*streamBlock)
@@ -82,24 +88,27 @@ func (o *MessageOutbound) transformFrame(ctx context.Context, frame model.Stream
 			appendEvent(model.StreamEvent{Kind: model.StreamEventKindUsageDelta, Usage: o.streamUsage})
 		}
 	}
+	appendNative := func() {
+		appendEvent(model.StreamEvent{Kind: model.StreamEventKindNativeItem, NativeItem: &model.ProtocolItem{Format: model.APIFormatAnthropicMessage, Position: -1, Raw: append(json.RawMessage(nil), frame.Data...)}})
+	}
 	switch event.Type {
 	case "message_start":
 		if event.Message == nil {
-			return nil, fmt.Errorf("Anthropic message_start missing message")
-		}
-		if o.streamID != "" {
-			return nil, fmt.Errorf("duplicate Anthropic message_start")
+			appendNative()
+			break
 		}
 		o.streamID, o.streamModel = event.Message.ID, event.Message.Model
 		appendEvent(model.StreamEvent{Kind: model.StreamEventKindMessageStart, Role: "assistant"})
 		appendUsage(event.Message.Usage)
 	case "content_block_start":
 		if event.Index == nil || *event.Index < 0 || event.ContentBlock == nil {
-			return nil, fmt.Errorf("invalid Anthropic content_block_start")
+			appendNative()
+			break
 		}
 		index := int(*event.Index)
 		if previous := o.blocks[index]; previous != nil {
-			return nil, fmt.Errorf("duplicate Anthropic content block %d", index)
+			appendNative()
+			break
 		}
 		block := event.ContentBlock
 		state := &streamBlock{kind: block.Type}
@@ -150,37 +159,40 @@ func (o *MessageOutbound) transformFrame(ctx context.Context, frame model.Stream
 		}
 	case "content_block_delta":
 		if event.Index == nil || *event.Index < 0 || event.Delta == nil || event.Delta.Type == nil {
-			return nil, fmt.Errorf("invalid Anthropic content_block_delta")
+			appendNative()
+			break
 		}
 		index := int(*event.Index)
 		state := o.blocks[index]
-		if state != nil && state.stopped {
-			return nil, fmt.Errorf("delta for stopped Anthropic block %d", index)
-		}
 		switch *event.Delta.Type {
 		case "text_delta":
 			if event.Delta.Text == nil {
-				return nil, fmt.Errorf("Anthropic text_delta missing text")
+				appendNative()
+				break
 			}
 			appendEvent(model.StreamEvent{Kind: model.StreamEventKindTextDelta, Delta: &model.StreamDelta{Text: *event.Delta.Text}})
 		case "thinking_delta":
 			if event.Delta.Thinking == nil {
-				return nil, fmt.Errorf("Anthropic thinking_delta missing thinking")
+				appendNative()
+				break
 			}
 			appendEvent(model.StreamEvent{Kind: model.StreamEventKindThinkingDelta, Delta: &model.StreamDelta{Thinking: *event.Delta.Thinking}})
 		case "signature_delta":
 			if event.Delta.Signature == nil {
-				return nil, fmt.Errorf("Anthropic signature_delta missing signature")
+				appendNative()
+				break
 			}
 			appendEvent(model.StreamEvent{Kind: model.StreamEventKindSignatureDelta, Delta: &model.StreamDelta{Signature: *event.Delta.Signature}})
 		case "citations_delta":
 			if event.Delta.Citation == nil {
-				return nil, fmt.Errorf("Anthropic citations_delta missing citation")
+				appendNative()
+				break
 			}
 			appendEvent(model.StreamEvent{Kind: model.StreamEventKindCitationDelta, Citation: event.Delta.Citation})
 		case "input_json_delta":
 			if state == nil || state.tool == nil || event.Delta.PartialJSON == nil {
-				return nil, fmt.Errorf("Anthropic input_json_delta without tool block %d", index)
+				appendNative()
+				break
 			}
 			arguments := *event.Delta.PartialJSON
 			state.arguments += arguments
@@ -188,21 +200,20 @@ func (o *MessageOutbound) transformFrame(ctx context.Context, frame model.Stream
 			tool.Function = model.FunctionCall{Arguments: arguments}
 			appendEvent(model.StreamEvent{Kind: model.StreamEventKindToolCallDelta, ToolCall: &tool, Delta: &model.StreamDelta{Arguments: arguments}})
 		default:
-			appendEvent(model.StreamEvent{Kind: model.StreamEventKindNativeItem, NativeItem: &model.ProtocolItem{Format: model.APIFormatAnthropicMessage, Position: -1, Raw: append(json.RawMessage(nil), frame.Data...)}})
+			appendNative()
 		}
 	case "content_block_stop":
 		if event.Index == nil {
-			return nil, fmt.Errorf("Anthropic content_block_stop missing index")
+			appendNative()
+			break
 		}
 		state := o.blocks[int(*event.Index)]
 		if state == nil || state.stopped {
-			return nil, fmt.Errorf("Anthropic stop without open block %d", *event.Index)
+			appendNative()
+			break
 		}
 		state.stopped = true
 		if state.tool != nil {
-			if state.arguments != "" && !json.Valid([]byte(state.arguments)) {
-				return nil, fmt.Errorf("invalid complete Anthropic tool arguments in block %d", *event.Index)
-			}
 			appendEvent(model.StreamEvent{Kind: model.StreamEventKindToolCallStop, ToolCall: &model.ToolCall{Index: state.tool.Index, ID: state.tool.ID}})
 		} else {
 			appendEvent(model.StreamEvent{Kind: model.StreamEventKindContentBlockStop, ContentBlock: &model.StreamContentBlock{Type: state.kind}})
@@ -211,6 +222,7 @@ func (o *MessageOutbound) transformFrame(ctx context.Context, frame model.Stream
 		appendUsage(event.Usage)
 		if event.Delta != nil && event.Delta.StopReason != nil {
 			if reason := convertStopReason(event.Delta.StopReason); reason != nil {
+				o.finished = true
 				appendEvent(model.StreamEvent{Kind: model.StreamEventKindMessageStop, StopReason: model.ParseFinishReason(*reason), StopSequence: event.Delta.StopSequence})
 			}
 		}
@@ -228,10 +240,10 @@ func (o *MessageOutbound) transformFrame(ctx context.Context, frame model.Stream
 		o.streamError = err
 		appendEvent(model.StreamEvent{Kind: model.StreamEventKindError, Error: err})
 	default:
-		if event.Type == "" {
-			return nil, fmt.Errorf("Anthropic stream frame missing type")
-		}
-		appendEvent(model.StreamEvent{Kind: model.StreamEventKindNativeItem, NativeItem: &model.ProtocolItem{Format: model.APIFormatAnthropicMessage, Position: -1, Raw: append(json.RawMessage(nil), frame.Data...)}})
+		appendNative()
+	}
+	if len(events) == 0 {
+		appendNative()
 	}
 	return events, nil
 }
@@ -244,6 +256,10 @@ func (o *MessageOutbound) EndStream(ctx context.Context) ([]model.StreamEvent, e
 		return nil, o.streamError
 	}
 	if !o.terminal {
+		if o.finished {
+			o.terminal = true
+			return []model.StreamEvent{{Kind: model.StreamEventKindDone}}, nil
+		}
 		return nil, fmt.Errorf("Anthropic stream ended before message_stop")
 	}
 	return nil, nil

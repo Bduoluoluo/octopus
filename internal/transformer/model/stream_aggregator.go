@@ -92,6 +92,22 @@ func (a *StreamAggregator) Response() *InternalLLMResponse {
 	if err := applyCitationBlocks(result, a.chunks); err != nil && result.Error == nil {
 		result.Error = &ResponseError{StatusCode: 502, Detail: ErrorDetail{Type: "protocol_aggregation_error", Message: err.Error()}}
 	}
+	for _, chunk := range a.chunks {
+		if chunk == nil {
+			continue
+		}
+		for _, event := range chunk.ProtocolEvents {
+			if event.Kind != StreamEventKindMessageStop || event.Message == nil || event.ProviderExtensions == nil || event.ProviderExtensions.OpenAI == nil || len(event.ProviderExtensions.OpenAI.RawResponseItems) == 0 {
+				continue
+			}
+			for index := range result.Choices {
+				if result.Choices[index].Index == event.Index {
+					cloned := CloneRequest(&InternalLLMRequest{Messages: []Message{*event.Message}})
+					result.Choices[index].Message = &cloned.Messages[0]
+				}
+			}
+		}
+	}
 	return result
 }
 

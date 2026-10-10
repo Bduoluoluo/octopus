@@ -42,6 +42,31 @@ func (i *MessagesInbound) TransformStreamEvents(ctx context.Context, events []mo
 		}
 	}
 	i.foreignStream = foreign
+	var expanded []model.StreamEvent
+	for _, event := range events {
+		if event.Message != nil && event.Message.Refusal != "" && (event.Kind == model.StreamEventKindMessageDelta || event.Kind == model.StreamEventKindMetadata) {
+			message := *event.Message
+			message.Refusal = ""
+			projection := event
+			projection.Message = &message
+			expanded = append(expanded, projection)
+		} else {
+			expanded = append(expanded, event)
+		}
+		if (event.Kind == model.StreamEventKindMessageDelta || event.Kind == model.StreamEventKindMetadata) && event.Message != nil {
+			for _, annotation := range event.Message.Annotations {
+				citation, err := wire.AnnotationCitation(annotation)
+				if err != nil {
+					return nil, err
+				}
+				expanded = append(expanded, model.StreamEvent{Kind: model.StreamEventKindCitationDelta, Citation: &citation})
+			}
+			if event.Message.Refusal != "" {
+				expanded = append(expanded, model.StreamEvent{Kind: model.StreamEventKindTextDelta, Delta: &model.StreamDelta{Refusal: event.Message.Refusal}})
+			}
+		}
+	}
+	events = expanded
 	if i.blocks == nil {
 		i.blocks = make(map[string]*outputBlock)
 	}
@@ -179,7 +204,13 @@ func (i *MessagesInbound) TransformStreamEvents(ctx context.Context, events []mo
 		if stream := model.InternalResponseFromStreamEvents([]model.StreamEvent{event}); stream != nil && stream.Object != "[DONE]" {
 			i.streamAggregator.Add(stream)
 		}
-		if i.messageStopped {
+		if native, handled, err := i.restoreStreamFrame(event); err != nil {
+			return nil, err
+		} else if handled {
+			output = append(output, native...)
+			continue
+		}
+		if i.messageStopped && event.Kind != model.StreamEventKindError {
 			continue
 		}
 		if event.Kind == model.StreamEventKindMetadata || event.Kind == model.StreamEventKindMessageDelta {
@@ -265,7 +296,15 @@ func (i *MessagesInbound) TransformStreamEvents(ctx context.Context, events []mo
 				if event.Citation == nil {
 					return nil, fmt.Errorf("Anthropic citation event missing citation")
 				}
-				delta.Type, delta.Citation = lo.ToPtr("citations_delta"), event.Citation
+				citation := *event.Citation
+				if citation.Type == "url_citation" {
+					converted, err := wire.ConvertCitation(citation)
+					if err != nil {
+						return nil, err
+					}
+					citation = converted
+				}
+				delta.Type, delta.Citation = lo.ToPtr("citations_delta"), &citation
 			}
 			block, err := open(event, kind)
 			if err != nil {
@@ -327,6 +366,9 @@ func (i *MessagesInbound) TransformStreamEvents(ctx context.Context, events []mo
 				}
 			}
 		case model.StreamEventKindDone:
+			if !i.hasFinished {
+				i.stopReason, i.hasFinished = lo.ToPtr("end_turn"), true
+			}
 			if err := finalize(); err != nil {
 				return nil, err
 			}
@@ -366,10 +408,7 @@ func validateSupplementalEvent(event model.StreamEvent) error {
 	if message.Audio != nil || len(message.Images) > 0 {
 		return fmt.Errorf("Anthropic Messages cannot represent streamed audio or generated images")
 	}
-	if len(message.Annotations) > 0 {
-		return fmt.Errorf("Anthropic Messages requires citation events with source locations; generic streamed annotations cannot be converted losslessly")
-	}
-	if message.Content.Content != nil || len(message.Content.MultipleContent) > 0 || len(message.ToolCalls) > 0 || message.GetReasoningContent() != "" || message.ReasoningSignature != nil || len(message.ReasoningBlocks) > 0 || len(message.RedactedThinkingBlocks) > 0 || message.Refusal != "" {
+	if message.Content.Content != nil || len(message.Content.MultipleContent) > 0 || len(message.ToolCalls) > 0 || message.GetReasoningContent() != "" || message.ReasoningSignature != nil || len(message.ReasoningBlocks) > 0 || len(message.RedactedThinkingBlocks) > 0 {
 		return fmt.Errorf("Anthropic supplemental event %q contains message content requiring dedicated content events", event.Kind)
 	}
 	return nil

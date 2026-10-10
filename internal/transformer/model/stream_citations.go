@@ -477,8 +477,9 @@ func readInitialBlock(block *aggregatedStreamBlock) error {
 	}
 	if block.kind == "text" {
 		if raw := block.fields["citations"]; len(raw) > 0 && !bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
-			if err := json.Unmarshal(raw, &block.citations); err != nil {
-				return fmt.Errorf("invalid native block citations: %w", err)
+			var citations []ContentCitation
+			if json.Unmarshal(raw, &citations) == nil {
+				block.citations = citations
 			}
 		}
 	}
@@ -505,7 +506,7 @@ func writeFinalBlock(block *aggregatedStreamBlock) error {
 	if block.argumentsSet && json.Valid([]byte(block.arguments)) {
 		block.fields["input"] = json.RawMessage(block.arguments)
 	} else if block.argumentsSet && block.closed {
-		return fmt.Errorf("invalid completed native tool arguments at content index %d", block.key.content)
+		block.fields["input"], _ = json.Marshal(block.arguments)
 	}
 	encoded, err := json.Marshal(block.fields)
 	if err != nil {

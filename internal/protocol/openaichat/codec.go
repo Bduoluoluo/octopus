@@ -45,7 +45,7 @@ func EncodeRequest(ctx context.Context, request *model.InternalLLMRequest) ([]by
 		return nil, err
 	}
 	for _, tool := range request.Tools {
-		if tool.Type != "function" {
+		if tool.Type != "function" && request.RawAPIFormat != model.APIFormatOpenAIChatCompletion && (tool.ProviderExtensions == nil || tool.ProviderExtensions.OpenAIChat == nil) {
 			return nil, fmt.Errorf("cannot represent tool %q in Chat Completions", tool.Type)
 		}
 	}
@@ -53,13 +53,7 @@ func EncodeRequest(ctx context.Context, request *model.InternalLLMRequest) ([]by
 		if err := validateExtensions(message.ProviderExtensions); err != nil {
 			return nil, err
 		}
-		if request.RawAPIFormat != model.APIFormatOpenAIChatCompletion && (len(message.RedactedThinkingBlocks) > 0 || message.ReasoningSignature != nil) {
-			return nil, fmt.Errorf("cannot represent opaque reasoning in Chat Completions")
-		}
 		for _, part := range message.Content.MultipleContent {
-			if len(part.Citations) > 0 {
-				return nil, fmt.Errorf("cannot represent block citations in Chat request history without a lossless mapping")
-			}
 			if part.Native != nil || part.Document != nil || part.ServerToolUse != nil || part.ServerToolResult != nil {
 				return nil, fmt.Errorf("cannot represent %q content in Chat Completions", part.Type)
 			}
@@ -73,6 +67,20 @@ func EncodeRequest(ctx context.Context, request *model.InternalLLMRequest) ([]by
 		}
 	}
 	wire := RequestFromLLM(ctx, request, ReasoningFieldAll)
+	var err error
+	wire.Fields, err = preserveReasoningItems(wire.Fields, request.ProviderExtensions, request.OpenAIRawInputItems())
+	if err != nil {
+		return nil, err
+	}
+	for index, message := range request.Messages {
+		if request.RawAPIFormat != "" && request.RawAPIFormat != model.APIFormatOpenAIChatCompletion {
+			preserveForeignSignature(&wire.Messages[index])
+		}
+		wire.Messages[index].Fields, err = preserveReasoningItems(wire.Messages[index].Fields, message.ProviderExtensions, nil)
+		if err != nil {
+			return nil, err
+		}
+	}
 	wire.Prediction = request.Prediction
 	wire.WebSearchOptions = request.WebSearchOptions
 	wire.N = request.N
@@ -123,20 +131,36 @@ func EncodeResponse(response *model.InternalLLMResponse) ([]byte, error) {
 			if err := validateExtensions(message.ProviderExtensions); err != nil {
 				return nil, err
 			}
-			for _, call := range message.ToolCalls {
-				if call.Type != "" && call.Type != "function" {
-					return nil, fmt.Errorf("cannot represent %q tool call in Chat Completions", call.Type)
-				}
-			}
 			for _, part := range message.Content.MultipleContent {
 				if part.Native != nil || part.Document != nil || part.ServerToolUse != nil || part.ServerToolResult != nil {
 					return nil, fmt.Errorf("cannot represent %q response content in Chat Completions", part.Type)
 				}
-				if len(part.Citations) > 0 {
-					return nil, fmt.Errorf("cannot represent block citations in Chat Completions without a location mapping")
-				}
 			}
 		}
 	}
-	return json.Marshal(ResponseFromLLM(response))
+	wire := ResponseFromLLM(response)
+	var err error
+	wire.Fields, err = preserveReasoningItems(wire.Fields, response.ProviderExtensions, response.RawResponsesOutputItems)
+	if err != nil {
+		return nil, err
+	}
+	for index, choice := range response.Choices {
+		if len(response.RawResponsesOutputItems) > 0 || response.ProviderExtensions != nil && response.ProviderExtensions.OpenAIChat == nil && (response.ProviderExtensions.OpenAIResponses != nil || response.ProviderExtensions.Anthropic != nil) {
+			preserveForeignSignature(wire.Choices[index].Message)
+			preserveForeignSignature(wire.Choices[index].Delta)
+		}
+		if choice.Message != nil {
+			wire.Choices[index].Message.Fields, err = preserveReasoningItems(wire.Choices[index].Message.Fields, choice.Message.ProviderExtensions, nil)
+			if err != nil {
+				return nil, err
+			}
+		}
+		if choice.Delta != nil {
+			wire.Choices[index].Delta.Fields, err = preserveReasoningItems(wire.Choices[index].Delta.Fields, choice.Delta.ProviderExtensions, nil)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	return json.Marshal(wire)
 }

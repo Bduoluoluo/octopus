@@ -167,9 +167,11 @@ func (s *Stop) UnmarshalJSON(data []byte) error {
 
 // Message represents a message in the conversation.
 type Message struct {
-	Fields             model.ProtocolFields `json:"-"`
-	Images             []MessageContentPart `json:"images,omitempty"`
-	ReasoningSignature *string              `json:"reasoning_signature,omitempty"`
+	Fields                 model.ProtocolFields   `json:"-"`
+	Images                 []MessageContentPart   `json:"images,omitempty"`
+	ReasoningSignature     *string                `json:"reasoning_signature,omitempty"`
+	RedactedThinkingBlocks []string               `json:"redacted_thinking_blocks,omitempty"`
+	ReasoningBlocks        []model.ReasoningBlock `json:"reasoning_blocks,omitempty"`
 	// user, assistant, system, tool, developer
 	Role string `json:"role,omitempty"`
 	// Content of the message.
@@ -270,13 +272,14 @@ func (c *MessageContent) UnmarshalJSON(data []byte) error {
 
 // MessageContentPart represents different types of content (text, image, video, etc.)
 type MessageContentPart struct {
-	Fields     model.ProtocolFields `json:"-"`
-	Type       string               `json:"type"`
-	Text       *string              `json:"text,omitempty"`
-	ImageURL   *ImageURL            `json:"image_url,omitempty"`
-	VideoURL   *VideoURL            `json:"video_url,omitempty"`
-	InputAudio *InputAudio          `json:"input_audio,omitempty"`
-	File       *File                `json:"file,omitempty"`
+	Fields     model.ProtocolFields    `json:"-"`
+	Citations  []model.ContentCitation `json:"citations,omitempty"`
+	Type       string                  `json:"type"`
+	Text       *string                 `json:"text,omitempty"`
+	ImageURL   *ImageURL               `json:"image_url,omitempty"`
+	VideoURL   *VideoURL               `json:"video_url,omitempty"`
+	InputAudio *InputAudio             `json:"input_audio,omitempty"`
+	File       *File                   `json:"file,omitempty"`
 }
 
 type File struct {
@@ -378,7 +381,7 @@ type OpenAIError struct {
 type Tool struct {
 	Fields   model.ProtocolFields `json:"-"`
 	Type     string               `json:"type"`
-	Function Function             `json:"function"`
+	Function Function             `json:"function,omitzero"`
 }
 
 // ToLLMTool converts OpenAI Tool to unified model.Tool.
@@ -427,7 +430,7 @@ type ToolCall struct {
 	Fields   model.ProtocolFields `json:"-"`
 	ID       string               `json:"id,omitempty"`
 	Type     string               `json:"type,omitempty"`
-	Function FunctionCall         `json:"function"`
+	Function FunctionCall         `json:"function,omitzero"`
 	Index    int                  `json:"index"`
 	// ExtraContent carries provider-specific extension fields, such as Gemini OpenAI thought signature.
 	ExtraContent *ToolCallExtraContent `json:"extra_content,omitempty"`
